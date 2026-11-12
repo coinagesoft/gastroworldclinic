@@ -48,13 +48,20 @@ export default function Header() {
     <header className={`site-header ${isScrolled ? 'scrolled' : ''}`}>
       <div className="container header-inner">
         <Link href="/" className="brand-meditro" onClick={closeMenu}>
-          <span className="brand-logo-icon" aria-hidden="true">
-            <Image src={CLINIC.logo} alt="" width={44} height={44} unoptimized style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-          </span>
-          <span className="brand-text-wrap">
-            <strong>{CLINIC.shortName}</strong>
-            <small>Piles Clinic</small>
-          </span>
+          <Image
+            src={CLINIC.logo}
+            alt={CLINIC.name}
+            width={220}
+            height={56}
+            priority
+            unoptimized
+            style={{
+              height: 'clamp(36px, 4.5vw, 52px)',
+              width: 'auto',
+              maxWidth: '65vw',
+              objectFit: 'contain',
+            }}
+          />
         </Link>
 
         <button
@@ -100,7 +107,7 @@ export default function Header() {
                 className={pathname === '/treatments' ? 'active' : ''}
                 onClick={closeMenu}
               >
-                Treatments
+                Services
               </Link>
             </li>
             <li>
@@ -109,7 +116,7 @@ export default function Header() {
                 className={pathname?.startsWith('/news') ? 'active' : ''}
                 onClick={closeMenu}
               >
-                News
+                Blogs
               </Link>
             </li>
             <li>
