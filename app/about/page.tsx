@@ -32,11 +32,28 @@ const STRENGTHS = [
   'Follow-up care',
 ];
 
+// Each card links to its own service page (see lib/servicesData.ts for the slugs)
 const SERVICES = [
-  { title: 'Consultation', text: 'Digestive, liver, gallbladder, pancreas and GI cancer consultations.' },
-  { title: 'Endoscopic Procedures', text: 'Upper GI endoscopy, colonoscopy, ERCP and endo ultrasound.' },
-  { title: 'Day Care GI Procedures', text: 'Ascitic tapping, albumin infusion, vaccination, Fibroscan and more.' },
-  { title: 'Nutritional Counselling', text: 'Diet plans for liver, pancreatic and common gastro illnesses.' },
+  {
+    title: 'Consultation',
+    text: 'Digestive, liver, gallbladder, pancreas and GI cancer consultations.',
+    href: '/services/consultation',
+  },
+  {
+    title: 'Endoscopic Procedures',
+    text: 'Upper GI endoscopy, colonoscopy, ERCP and endo ultrasound.',
+    href: '/services/endoscopic-procedures',
+  },
+  {
+    title: 'Day Care GI Procedures',
+    text: 'Ascitic tapping, albumin infusion, vaccination, Fibroscan and more.',
+    href: '/services/day-care-gi-procedures',
+  },
+  {
+    title: 'Nutritional Counselling',
+    text: 'Diet plans for liver, pancreatic and common gastro illnesses.',
+    href: '/services/nutritional-counselling',
+  },
 ];
 
 const Check = () => (
@@ -263,7 +280,7 @@ export default function AboutPage() {
               <article className="gw-ab-service" key={s.title}>
                 <h4>{s.title}</h4>
                 <p>{s.text}</p>
-                <Link href="/treatments">Learn more &rarr;</Link>
+                <Link href={s.href}>Learn more &rarr;</Link>
               </article>
             ))}
           </div>

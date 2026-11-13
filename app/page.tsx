@@ -93,6 +93,61 @@ const WHY_CHOOSE_US = [
   },
 ] as const;
 
+/** Service cards. Each one links to its own page under app/services/<slug>. */
+const SERVICES = [
+  {
+    title: 'Consultation',
+    badge: 'Gastro & Liver',
+    text: 'Our health care consultation service blends expertise with empathy, ensuring every patient feels heard and understood.',
+    href: '/services/consultation',
+    icon: (
+      <>
+        <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" />
+        <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4" />
+        <circle cx="20" cy="10" r="2" />
+      </>
+    ),
+  },
+  {
+    title: 'Endoscopic Procedures',
+    badge: 'Endoscopy',
+    text: 'We offer premier endoscopic procedures, ensuring precise diagnoses and effective treatments for disorders.',
+    href: '/services/endoscopic-procedures',
+    icon: (
+      <>
+        <path d="M10.5 20.5 10 22l-4-2.5L2 17l1.5-.5" />
+        <path d="m14 6 4 4" />
+        <path d="M19 5 9 15l-4 1 1-4L16 2z" />
+      </>
+    ),
+  },
+  {
+    title: 'Day Care GI Procedures',
+    badge: 'Day Care',
+    text: 'At Gastroworld Clinic, we specialize in providing advanced day care gastrointestinal procedures.',
+    href: '/services/day-care-gi-procedures',
+    icon: (
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <line x1="12" y1="9" x2="12" y2="15" />
+        <line x1="9" y1="12" x2="15" y2="12" />
+      </>
+    ),
+  },
+  {
+    title: 'Nutritional Counselling',
+    badge: 'Nutrition',
+    text: 'Our nutritional counselling service plays a crucial role in managing gastroenterology diseases by providing dietary guidance.',
+    href: '/services/nutritional-counselling',
+    icon: (
+      <>
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      </>
+    ),
+  },
+] as const;
+
 export default function HomePage() {
   return (
     <>
@@ -124,7 +179,7 @@ export default function HomePage() {
               <Link href="/appointment" className="btn-meditro-orange">
                 Book Appointment
               </Link>
-              <Link href="/treatments" className="btn-meditro-outline">
+              <Link href="/services" className="btn-meditro-outline">
                 Our Services
               </Link>
               <a href={`tel:${CLINIC.phone.tel}`} className="btn-meditro-outline">
@@ -422,7 +477,7 @@ export default function HomePage() {
               <p>
                 Advanced endoscopic or day care GI procedures when needed, along with nutritional counselling and follow-up care.
               </p>
-              <Link href="/treatments" className="btn-process-link">
+              <Link href="/services" className="btn-process-link">
                 <span>View Services</span>
                 <span className="process-arrow-box" aria-hidden="true">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -436,9 +491,9 @@ export default function HomePage() {
       </section>
 
       {/* =========================================================
-          4. SERVICES SECTION (linked to /treatments)
+          4. SERVICES SECTION (each card links to /services/<slug>)
          ========================================================= */}
-      <section className="meditro-section gw-services" id="treatments">
+      <section className="meditro-section gw-services" id="services">
         {/* Styles for this section. Can be moved to globals.css. */}
         <style>{`
           .gw-services.meditro-section { background: #4749bd; position: relative; overflow: hidden; }
@@ -470,72 +525,25 @@ export default function HomePage() {
           </div>
 
           <div className="gw-services-grid">
-            <article className="meditro-service-card">
-              <div className="service-icon-frame">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3" />
-                  <path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4" />
-                  <circle cx="20" cy="10" r="2" />
-                </svg>
-              </div>
-              <span className="card-cat-badge">Gastro &amp; Liver</span>
-              <h3>Consultation</h3>
-              <p>Our health care consultation service blends expertise with empathy, ensuring every patient feels heard and understood.</p>
-              <Link href="/treatments" className="btn-service-more">
-                Service Details &rarr;
-              </Link>
-            </article>
-
-            <article className="meditro-service-card">
-              <div className="service-icon-frame">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10.5 20.5 10 22l-4-2.5L2 17l1.5-.5" />
-                  <path d="m14 6 4 4" />
-                  <path d="M19 5 9 15l-4 1 1-4L16 2z" />
-                </svg>
-              </div>
-              <span className="card-cat-badge">Endoscopy</span>
-              <h3>Endoscopic Procedures</h3>
-              <p>We offer premier endoscopic procedures, ensuring precise diagnoses and effective treatments for disorders.</p>
-              <Link href="/treatments" className="btn-service-more">
-                Service Details &rarr;
-              </Link>
-            </article>
-
-            <article className="meditro-service-card">
-              <div className="service-icon-frame">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <line x1="12" y1="9" x2="12" y2="15" />
-                  <line x1="9" y1="12" x2="15" y2="12" />
-                </svg>
-              </div>
-              <span className="card-cat-badge">Day Care</span>
-              <h3>Day Care GI Procedures</h3>
-              <p>At Gastroworld Clinic, we specialize in providing advanced day care gastrointestinal procedures.</p>
-              <Link href="/treatments" className="btn-service-more">
-                Service Details &rarr;
-              </Link>
-            </article>
-
-            <article className="meditro-service-card">
-              <div className="service-icon-frame">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                </svg>
-              </div>
-              <span className="card-cat-badge">Nutrition</span>
-              <h3>Nutritional Counselling</h3>
-              <p>Our nutritional counselling service plays a crucial role in managing gastroenterology diseases by providing dietary guidance.</p>
-              <Link href="/treatments" className="btn-service-more">
-                Service Details &rarr;
-              </Link>
-            </article>
+            {SERVICES.map((service) => (
+              <article className="meditro-service-card" key={service.href}>
+                <div className="service-icon-frame">
+                  <svg {...iconProps} aria-hidden="true">
+                    {service.icon}
+                  </svg>
+                </div>
+                <span className="card-cat-badge">{service.badge}</span>
+                <h3>{service.title}</h3>
+                <p>{service.text}</p>
+                <Link href={service.href} className="btn-service-more">
+                  Service Details &rarr;
+                </Link>
+              </article>
+            ))}
           </div>
 
           <div className="gw-services-cta">
-            <Link href="/treatments" className="btn-meditro-orange">
+            <Link href="/services" className="btn-meditro-orange">
               Explore All Services &rarr;
             </Link>
           </div>

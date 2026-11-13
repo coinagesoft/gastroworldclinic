@@ -5,10 +5,20 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { CLINIC } from '@/lib/clinicInfo';
+import { SERVICES } from '@/lib/servicesData';
+import './header-dropdown.css';
+
+const Chevron = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="6 9 12 15 18 9" />
+  </svg>
+);
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isServicesOpen, setIsServicesOpen] = useState(false); // mobile accordion
+  const [openSub, setOpenSub] = useState<string | null>(null); // mobile accordion
   const pathname = usePathname();
 
   useEffect(() => {
@@ -24,7 +34,7 @@ export default function Header() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setIsMenuOpen(false);
+        closeMenu();
       }
     };
 
@@ -33,7 +43,7 @@ export default function Header() {
   }, []);
 
   useEffect(() => {
-    setIsMenuOpen(false);
+    closeMenu();
   }, [pathname]);
 
   const toggleMenu = () => {
@@ -42,6 +52,8 @@ export default function Header() {
 
   const closeMenu = () => {
     setIsMenuOpen(false);
+    setIsServicesOpen(false);
+    setOpenSub(null);
   };
 
   return (
@@ -101,15 +113,70 @@ export default function Header() {
                 About Us
               </Link>
             </li>
-            <li>
-              <Link
-                href="/treatments"
-                className={pathname === '/treatments' ? 'active' : ''}
-                onClick={closeMenu}
-              >
-                Services
-              </Link>
+
+            {/* ===== Services dropdown (4 pages, sub-items are sections on those pages) ===== */}
+            <li className={`has-dropdown ${isServicesOpen ? 'open' : ''}`}>
+              <div className="nav-parent-row">
+                <Link
+                  href="/services"
+                  className={pathname?.startsWith('/services') ? 'active' : ''}
+                  onClick={closeMenu}
+                >
+                  Services
+                </Link>
+                <button
+                  type="button"
+                  className="dropdown-toggle"
+                  aria-label="Toggle services menu"
+                  aria-expanded={isServicesOpen}
+                  onClick={() => setIsServicesOpen((prev) => !prev)}
+                >
+                  <Chevron />
+                </button>
+              </div>
+
+              <ul className="dropdown-menu">
+                {SERVICES.map((service) => (
+                  <li
+                    key={service.slug}
+                    className={`has-flyout ${openSub === service.slug ? 'open' : ''}`}
+                  >
+                    <div className="nav-parent-row">
+                      <Link
+                        href={`/services/${service.slug}`}
+                        className={pathname === `/services/${service.slug}` ? 'active' : ''}
+                        onClick={closeMenu}
+                      >
+                        {service.title}
+                      </Link>
+                      <button
+                        type="button"
+                        className="dropdown-toggle"
+                        aria-label={`Toggle ${service.title} menu`}
+                        aria-expanded={openSub === service.slug}
+                        onClick={() =>
+                          setOpenSub((prev) => (prev === service.slug ? null : service.slug))
+                        }
+                      >
+                        <Chevron />
+                      </button>
+                    </div>
+
+                    <ul className="flyout-menu">
+                      {service.sections.map((sec) => (
+                        <li key={sec.id}>
+                          <Link href={`/services/${service.slug}#${sec.id}`} onClick={closeMenu}>
+                            {sec.title}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
             </li>
+            {/* ===== end Services dropdown ===== */}
+
             <li>
               <Link
                 href="/news"

@@ -1,0 +1,119 @@
+/* ===== MENU THEME - change these 5 values to match your project =====
+   (estimated from your header: navy text, indigo button, orange active link) */
+:root {
+  --theme-accent: #5457d6;  /* hover background (same indigo as your "Book Visit" button) */
+  --theme-active: #f26b21;  /* active page link (same orange as your "Services" link) */
+  --theme-ink:    #1c1a5e;  /* dark navy text / headings */
+  --theme-muted:  #4b5280;  /* normal dropdown link colour */
+  --theme-soft:   #f1f2ff;  /* light tint backgrounds (page hero, placeholders) */
+  --theme-border: #e3e5f5;
+}
+/* ==================================================================== */
+
+/* Services dropdown + flyout for Header.tsx (v2)
+   Strong overrides because globals.css also styles `.main-nav li / a`.
+   If your mobile menu breaks at a width other than 991px, change 991px / 992px below. */
+
+.main-nav li.has-dropdown,
+.main-nav li.has-flyout { position: relative; list-style: none; }
+
+.main-nav .nav-parent-row { display: flex; align-items: center; gap: 2px; }
+
+.main-nav .dropdown-toggle {
+  background: none; border: 0; padding: 6px; cursor: pointer; color: inherit;
+  display: inline-flex; align-items: center; line-height: 1;
+}
+.main-nav .dropdown-toggle svg { transition: transform .2s ease; }
+.main-nav li.open > .nav-parent-row .dropdown-toggle svg { transform: rotate(180deg); }
+
+/* ---- shared reset for both menu levels ---- */
+.main-nav ul.dropdown-menu,
+.main-nav ul.flyout-menu {
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  background: #fff;
+  display: none;
+  flex-direction: column;
+  align-items: stretch !important;
+  text-align: left !important;
+}
+.main-nav ul.dropdown-menu > li,
+.main-nav ul.flyout-menu > li {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  display: block;
+  list-style: none !important;
+  text-align: left !important;
+}
+.main-nav ul.dropdown-menu .nav-parent-row { width: 100%; gap: 0; }
+
+.main-nav ul.dropdown-menu a,
+.main-nav ul.flyout-menu a {
+  display: block !important;
+  flex: 1;
+  margin: 0 !important;
+  padding: 15px 20px !important;
+  text-align: left !important;
+  justify-content: flex-start !important;
+  font-size: 15px !important;
+  font-weight: 500 !important;
+  line-height: 1.35 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  white-space: normal;
+  color: var(--theme-muted) !important;
+  background: transparent;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.main-nav ul.dropdown-menu a::before,
+.main-nav ul.dropdown-menu a::after,
+.main-nav ul.flyout-menu a::before,
+.main-nav ul.flyout-menu a::after { display: none !important; content: none !important; }
+
+.main-nav ul.dropdown-menu a.active { color: var(--theme-active) !important; }
+
+.main-nav ul.dropdown-menu .dropdown-toggle { padding: 0 18px 0 8px; color: var(--theme-muted); }
+
+/* ---- Desktop ---- */
+@media (min-width: 992px) {
+  .main-nav ul.dropdown-menu {
+    position: absolute; top: 100%; left: 0; width: 310px; z-index: 1000;
+    box-shadow: 0 14px 32px rgba(40, 40, 120, .16);
+  }
+  /* invisible bridge so the menu doesn't close while the mouse travels down */
+  .main-nav ul.dropdown-menu::before {
+    content: ""; position: absolute; left: 0; right: 0; top: -16px; height: 16px;
+  }
+  .main-nav li.has-dropdown:hover > ul.dropdown-menu,
+  .main-nav li.has-dropdown:focus-within > ul.dropdown-menu { display: flex; }
+
+  /* small chevron points right on desktop */
+  .main-nav ul.dropdown-menu .dropdown-toggle svg { transform: rotate(-90deg); width: 14px; height: 14px; }
+
+  /* flyout opens to the LEFT, flush with the dropdown edge */
+  .main-nav ul.flyout-menu {
+    position: absolute; top: 0; right: 100%; width: 320px;
+    box-shadow: 0 14px 32px rgba(40, 40, 120, .16);
+  }
+  .main-nav li.has-flyout:hover > ul.flyout-menu,
+  .main-nav li.has-flyout:focus-within > ul.flyout-menu { display: flex; }
+
+  /* hover colours: whole row red, text + chevron white */
+  .main-nav ul.dropdown-menu li.has-flyout:hover > .nav-parent-row { background: var(--theme-accent); }
+  .main-nav ul.dropdown-menu li.has-flyout:hover > .nav-parent-row a,
+  .main-nav ul.dropdown-menu li.has-flyout:hover > .nav-parent-row .dropdown-toggle { color: #fff !important; }
+  .main-nav ul.flyout-menu a:hover { background: var(--theme-accent); color: #fff !important; }
+}
+
+/* ---- Mobile / tablet: accordion ---- */
+@media (max-width: 991px) {
+  .main-nav li.has-dropdown.open > ul.dropdown-menu { display: flex; padding-left: 12px !important; }
+  .main-nav li.has-flyout.open > ul.flyout-menu { display: flex; padding-left: 12px !important; }
+  .main-nav ul.dropdown-menu, .main-nav ul.flyout-menu { background: transparent; position: static; width: 100%; }
+  .main-nav ul.dropdown-menu a, .main-nav ul.flyout-menu a { padding: 11px 12px !important; }
+  .main-nav ul.dropdown-menu .dropdown-toggle { padding: 0 12px; }
+}

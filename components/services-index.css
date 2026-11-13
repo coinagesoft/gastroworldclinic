@@ -1,0 +1,178 @@
+/* Services index page (/services).
+   Uses its own "sv-" prefix so it does not clash with service-page.css,
+   which the individual service pages keep using. */
+
+.sv-page {
+  --sv-indigo: #4749bd;
+  --sv-navy: #1f1a6e;
+  --sv-ink: #4b4f73;
+  --sv-lavender: #f3f2ff;
+  --sv-line: #dcdaf5;
+  --sv-orange: #f47c3c;
+  background: #fff;
+}
+
+/* ---------- Hero ---------- */
+.sv-hero {
+  background: linear-gradient(180deg, var(--sv-lavender) 0%, #fff 100%);
+  padding: 72px 0 56px;
+}
+.sv-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--sv-ink);
+}
+.sv-crumbs a { color: var(--sv-indigo); text-decoration: none; font-weight: 600; }
+.sv-crumbs a:hover { text-decoration: underline; }
+.sv-hero h1 {
+  margin: 0 0 14px;
+  font-size: clamp(34px, 5vw, 52px);
+  line-height: 1.1;
+  color: var(--sv-navy);
+}
+.sv-hero-lead {
+  max-width: 62ch;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--sv-ink);
+}
+.sv-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+/* ---------- Buttons ---------- */
+.sv-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 26px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+}
+.sv-btn-orange { background: var(--sv-orange); color: #fff; }
+.sv-btn-orange:hover { background: #e06a2b; }
+.sv-btn-outline { border-color: var(--sv-indigo); color: var(--sv-indigo); background: transparent; }
+.sv-btn-outline:hover { background: var(--sv-indigo); color: #fff; }
+.sv-btn-light { border-color: rgba(255, 255, 255, 0.7); color: #fff; background: transparent; }
+.sv-btn-light:hover { background: #fff; color: var(--sv-indigo); }
+
+/* ---------- Cards ---------- */
+.sv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 24px;
+  align-items: stretch;
+  padding-top: 16px;
+  padding-bottom: 80px;
+}
+.sv-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 28px 26px 26px;
+  background: #fff;
+  border: 1px solid var(--sv-line);
+  border-radius: 20px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.sv-card:hover,
+.sv-card:focus-within {
+  border-color: var(--sv-indigo);
+  box-shadow: 0 12px 32px rgba(71, 73, 189, 0.12);
+}
+.sv-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 20px;
+  border-radius: 16px;
+  background: var(--sv-lavender);
+  color: var(--sv-indigo);
+}
+.sv-card h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+  line-height: 1.25;
+  color: var(--sv-navy);
+}
+.sv-tagline {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--sv-ink);
+}
+.sv-list {
+  flex: 1 1 auto;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+.sv-list li { border-top: 1px solid var(--sv-line); }
+.sv-list li:last-child { border-bottom: 1px solid var(--sv-line); }
+.sv-list a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 2px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--sv-navy);
+  text-decoration: none;
+  transition: color 0.2s, padding-left 0.2s;
+}
+.sv-list a svg { flex: 0 0 auto; color: var(--sv-orange); opacity: 0.85; }
+.sv-list a:hover { color: var(--sv-indigo); padding-left: 6px; }
+.sv-card .sv-btn { width: 100%; margin-top: auto; }
+
+/* ---------- Bottom call-to-action ---------- */
+.sv-cta {
+  background: var(--sv-indigo);
+  padding: 56px 0;
+  color: #fff;
+}
+.sv-cta-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.sv-cta h2 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 32px); color: #fff; }
+.sv-cta p { margin: 0; max-width: 56ch; font-size: 16px; line-height: 1.55; color: rgba(255, 255, 255, 0.85); }
+.sv-cta-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* ---------- Keyboard focus ---------- */
+.sv-page a:focus-visible {
+  outline: 3px solid var(--sv-orange);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1200px) {
+  .sv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .sv-hero { padding: 48px 0 36px; }
+  .sv-grid { grid-template-columns: 1fr; padding-bottom: 56px; }
+  .sv-hero-actions .sv-btn,
+  .sv-cta-actions .sv-btn { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sv-card, .sv-btn, .sv-list a { transition: none; }
+}
