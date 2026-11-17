@@ -1,7 +1,7 @@
 import mysql from 'mysql2/promise';
 
-// Local MySQL by default. Override any value in .env.local (see .env.local.example).
-const DB_NAME = process.env.DB_NAME || 'happy_morning';
+// Gastroworld MySQL database (Hostinger). Values come from .env.local.
+const DB_NAME = process.env.DB_NAME || 'gastroworld';
 
 const DB_CONFIG = {
   host: process.env.DB_HOST || '127.0.0.1',
@@ -29,22 +29,32 @@ declare global {
   var __schemaPromise: Promise<void> | null | undefined;
 }
 
-/** Creates the local database if it does not exist yet (needs a MySQL user with CREATE rights). */
+/**
+ * Tries to create the database if it does not exist yet.
+ * On hosted MySQL (Hostinger) the database is created in the control panel and the
+ * user has no CREATE rights, so a failure here is not fatal: we just continue.
+ */
 async function ensureDatabaseExists(): Promise<void> {
-  const { database: _db, ...serverConfig } = DB_CONFIG;
-  const conn = await mysql.createConnection({
-    host: serverConfig.host,
-    port: serverConfig.port,
-    user: serverConfig.user,
-    password: serverConfig.password,
-    charset: 'utf8mb4',
-  });
   try {
-    await conn.query(
-      `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    const conn = await mysql.createConnection({
+      host: DB_CONFIG.host,
+      port: DB_CONFIG.port,
+      user: DB_CONFIG.user,
+      password: DB_CONFIG.password,
+      charset: 'utf8mb4',
+    });
+    try {
+      await conn.query(
+        `CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      );
+    } finally {
+      await conn.end();
+    }
+  } catch (err) {
+    console.warn(
+      'Skipping CREATE DATABASE (the database should already exist):',
+      (err as Error).message
     );
-  } finally {
-    await conn.end();
   }
 }
 
@@ -83,7 +93,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       google_event_id VARCHAR(255),
       status VARCHAR(32) NOT NULL DEFAULT 'confirmed',
       payment_status VARCHAR(32) NOT NULL DEFAULT 'paid',
-      amount DECIMAL(10, 2) NOT NULL DEFAULT 800.00,
+      amount DECIMAL(10, 2) NOT NULL DEFAULT 500.00,
       payment_method VARCHAR(64) NOT NULL DEFAULT 'Razorpay',
       payment_id VARCHAR(128),
       paid_at VARCHAR(64),
@@ -113,7 +123,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       phone VARCHAR(32) NOT NULL,
       age INT NOT NULL,
       total_bookings INT NOT NULL DEFAULT 1,
-      total_paid DECIMAL(10, 2) NOT NULL DEFAULT 800.00,
+      total_paid DECIMAL(10, 2) NOT NULL DEFAULT 500.00,
       last_visit_date VARCHAR(16),
       created_at VARCHAR(64) NOT NULL,
       updated_at VARCHAR(64) NOT NULL
@@ -128,7 +138,7 @@ export async function ensureDatabaseSchema(): Promise<void> {
       patient_name VARCHAR(255) NOT NULL,
       patient_email VARCHAR(255) NOT NULL,
       patient_phone VARCHAR(32) NOT NULL,
-      amount DECIMAL(10, 2) NOT NULL DEFAULT 800.00,
+      amount DECIMAL(10, 2) NOT NULL DEFAULT 500.00,
       payment_method VARCHAR(64) NOT NULL DEFAULT 'Razorpay',
       payment_status VARCHAR(32) NOT NULL DEFAULT 'paid',
       paid_at VARCHAR(64) NOT NULL,

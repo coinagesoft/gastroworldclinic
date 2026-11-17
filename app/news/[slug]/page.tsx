@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: NewsDetailPageProps): Promise
   if (!article) return { title: 'Article Not Found' };
 
   return {
-    title: `${article.title} | Happy Morning Piles Clinic`,
+    title: `${article.title} | ${CLINIC.name}`,
     description: article.summary,
   };
 }
@@ -64,7 +64,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
             </Link>
             <span className="breadcrumb-sep">/</span>
             <Link href="/news">
-              <span>News</span>
+              <span>Health Guides</span>
             </Link>
             <span className="breadcrumb-sep">/</span>
             <span className="breadcrumb-current">{article.category}</span>
@@ -87,14 +87,13 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
             <div className="article-featured-image-wrap">
               <ArticleCover category={article.category} title={article.title} size="hero" />
               <div className="featured-img-caption">
-                Happy Morning Piles Clinic, Akurdi, PCMC, Pune
+                {CLINIC.name}, {CLINIC.address.area}
               </div>
             </div>
 
             {/* Key Takeaways Box */}
             <div className="key-takeaways-box">
               <div className="takeaways-header">
-                {/* <span className="takeaways-icon">&#x2728;</span> */}
                 <h3>Key Takeaways</h3>
               </div>
               <ul className="takeaways-list">
@@ -175,7 +174,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
             {/* Disclaimer */}
             <p className="article-disclaimer">
               This guide is for general information and is not a substitute for a medical examination.
-              {' '}{CLINIC.advisory}
+              Please consult a doctor for diagnosis and treatment advice that suits you.
             </p>
 
             {/* Navigation back to all articles */}
@@ -183,8 +182,8 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
               <Link href="/news" className="btn-back-to-news">
                 &larr; Back to All Guides
               </Link>
-              <Link href="/treatments" className="btn-browse-treatments">
-                Explore Related Treatments &rarr;
+              <Link href="/services" className="btn-browse-treatments">
+                Explore Our Services &rarr;
               </Link>
             </div>
           </main>
@@ -195,12 +194,13 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
             <div className="sidebar-widget author-card-widget">
               <div className="author-widget-header">
                 <Image
-                  src={CLINIC.logo}
-                  alt={CLINIC.name}
+                  src={CLINIC.banner}
+                  alt={`${CLINIC.name} logo`}
                   width={90}
                   height={90}
                   unoptimized
                   className="author-avatar"
+                  style={{ objectFit: 'contain', background: '#fff', padding: '6px' }}
                 />
                 <div>
                   <h4>{CLINIC.doctor.name}</h4>
@@ -223,9 +223,9 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
                 Consult {CLINIC.doctor.name} at {CLINIC.name}, {CLINIC.address.area}.
               </p>
               <ul className="cta-perks-list">
-                <li>&#x2713; OPD basis treatment, no admission</li>
-                <li>&#x2713; No cuts, no operation</li>
-                <li>&#x2713; No bed rest needed</li>
+                <li>&#x2713; Consultation and advanced endoscopic procedures</li>
+                <li>&#x2713; Day care GI procedures</li>
+                <li>&#x2713; Personalised nutritional counselling</li>
               </ul>
               <Link href="/appointment" className="btn-meditro-orange btn-sidebar-book">
                 Book Appointment

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { CLINIC } from '@/lib/clinicInfo';
 import {
   IconOverview,
   IconCalendar,
@@ -50,7 +51,7 @@ export default function AdminHeader({
         <div className="admin-topbar-inner">
           <div className="admin-topbar-left" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <Link href="/" className="admin-brand-link" title="Visit Public Website">
-              <strong>Happy Morning Clinic</strong>
+              <strong>{CLINIC.shortName} Clinic</strong>
               <span>Management Portal</span>
             </Link>
 

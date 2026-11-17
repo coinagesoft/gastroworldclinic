@@ -26,7 +26,7 @@ interface ToastContextValue {
 const ToastContext = createContext<ToastContextValue | null>(null);
 
 // Custom Event Name for direct standalone dispatch
-const TOAST_EVENT_NAME = 'happy-morning-toast-dispatch';
+const TOAST_EVENT_NAME = 'gastroworld-toast-dispatch';
 
 export interface ToastCustomEventDetail {
   message: string;
@@ -162,7 +162,7 @@ function ToastContainer({
 
   return (
     <div
-      className="clinic-toast-container"
+      className="gastroworld-toast-container"
       role="region"
       aria-label="Notifications"
       aria-live="polite"

@@ -1,6 +1,13 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { CLINIC } from '@/lib/clinicInfo';
+import { SERVICES } from '@/lib/servicesData';
+
+/** Social pages taken from gastroworldclinic.com */
+const SOCIAL = {
+  facebook: 'https://www.facebook.com/gastroworldpune/',
+  instagram: 'https://www.instagram.com/gastro_world_pune/',
+};
 
 export default function Footer() {
   return (
@@ -29,18 +36,25 @@ export default function Footer() {
         <div className="container footer-grid-meditro">
           {/* Column 1: Brand & Orange Phone Callout */}
           <div className="footer-col-brand">
-            <Link href="/" className="brand-meditro">
-              <span className="brand-logo-icon" aria-hidden="true">
-                <Image src={CLINIC.logo} alt="" width={44} height={44} unoptimized style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-              </span>
-              <span className="brand-text-wrap">
-                <strong>{CLINIC.shortName}</strong>
-                <small>Piles Clinic</small>
-              </span>
+            <Link href="/" className="brand-meditro" aria-label={`${CLINIC.name} home`}>
+              <Image
+                src={CLINIC.logo}
+                alt={CLINIC.name}
+                width={220}
+                height={56}
+                unoptimized
+                style={{
+                  height: 'clamp(40px, 4.5vw, 56px)',
+                  width: 'auto',
+                  maxWidth: '100%',
+                  objectFit: 'contain',
+                  mixBlendMode: 'multiply',
+                }}
+              />
             </Link>
 
             <p className="footer-about-text">
-              {CLINIC.tagline}. Piles, fissure and fistula treatment without operation and without admission, by {CLINIC.doctor.name}.
+              {CLINIC.tagline}. Consultations, advanced endoscopic procedures, day care GI procedures and nutritional counselling by {CLINIC.doctor.name}.
             </p>
 
             <div className="footer-contact-callout">
@@ -61,29 +75,30 @@ export default function Footer() {
             <h3 className="footer-col-title">Quick Links</h3>
             <div className="footer-title-wave" aria-hidden="true"></div>
             <ul>
+              <li><Link href="/">Home</Link></li>
               <li><Link href="/about">About Us</Link></li>
-              <li><Link href="/treatments">Our Treatments</Link></li>
-              <li><Link href="/news">Health Guides</Link></li>
+              <li><Link href="/services">Services</Link></li>
+              <li><Link href="/news">Blogs</Link></li>
               <li><Link href="/appointment">Book Appointment</Link></li>
-              <li><Link href="/#process">How Treatment Works</Link></li>
+              <li><Link href="/#process">How Care Works</Link></li>
               <li><Link href="/admin">Login</Link></li>
             </ul>
           </div>
 
-          {/* Column 3: Our Treatments */}
+          {/* Column 3: Our Services */}
           <div className="footer-col-links">
-            <h3 className="footer-col-title">Our Treatments</h3>
+            <h3 className="footer-col-title">Our Services</h3>
             <div className="footer-title-wave" aria-hidden="true"></div>
             <ul>
-              <li><Link href="/treatments#piles">Piles (बवासीर)</Link></li>
-              <li><Link href="/treatments#fissure">Fissure (फिशर)</Link></li>
-              <li><Link href="/treatments#fistula">Fistula (भगन्दर)</Link></li>
-              <li><Link href="/treatments#pilonidal-sinus">Pilonidal Sinus</Link></li>
-              <li><Link href="/treatments#stomach-ailments">Stomach Ailments</Link></li>
+              {SERVICES.map((service) => (
+                <li key={service.slug}>
+                  <Link href={`/services/${service.slug}`}>{service.title}</Link>
+                </li>
+              ))}
             </ul>
           </div>
 
-          {/* Column 4: Clinic Visit & Subscribe */}
+          {/* Column 4: Clinic Visit */}
           <div className="footer-col-subscribe">
             <h3 className="footer-col-title">Visit Clinic</h3>
             <div className="footer-title-wave" aria-hidden="true"></div>
@@ -115,12 +130,27 @@ export default function Footer() {
                   <circle cx="12" cy="10" r="3" />
                 </svg>
               </a>
-              
+
               <a href={`tel:${CLINIC.phone.tel}`} aria-label="Call Clinic" className="social-pill">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                 </svg>
               </a>
+
+              <a href={SOCIAL.facebook} target="_blank" rel="noopener noreferrer" aria-label="Gastroworld Clinic on Facebook" className="social-pill">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                </svg>
+              </a>
+
+              <a href={SOCIAL.instagram} target="_blank" rel="noopener noreferrer" aria-label="Gastroworld Clinic on Instagram" className="social-pill">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+              </a>
+
               <Link href="/admin" aria-label="Doctor Admin Portal" className="social-pill" title="Doctor Admin Portal">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -133,8 +163,8 @@ export default function Footer() {
 
         <div className="container footer-bottom-meditro" style={{ textAlign: 'center' }}>
           <p style={{ margin: '0 auto', textAlign: 'center' }}>
-            Copyright &copy; 2026{' '}
-            <strong>{CLINIC.name}</strong>. {CLINIC.advisory}
+            Copyright &copy; {new Date().getFullYear()}{' '}
+            <strong>{CLINIC.name}</strong>. Information on this website is for general awareness and is not a substitute for a medical examination. Please consult a doctor for diagnosis and treatment.
           </p>
         </div>
       </div>

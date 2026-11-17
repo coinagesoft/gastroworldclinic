@@ -22,10 +22,10 @@ export async function generateMetadata({ params }: TreatmentDetailPageProps): Pr
   const treatment = TREATMENTS.find((t) => t.id === slug);
   if (!treatment) return { title: 'Treatment Not Found' };
 
-  return {
-    title: `${treatment.name.split('(')[0].trim()} In-Depth Guide | Happy Morning Piles Clinic`,
-    description: treatment.shortDesc,
-  };
+return {
+  title: `${treatment.name.split('(')[0].trim()} In-Depth Guide | ${CLINIC.name}`,
+  description: treatment.shortDesc,
+};
 }
 
 export default async function TreatmentDetailPage({ params }: TreatmentDetailPageProps) {

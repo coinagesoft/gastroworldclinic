@@ -1,38 +1,62 @@
 import Image from 'next/image';
-import './article-cover.css';
+import { NEWS_ARTICLES } from '@/lib/newsData';
 
-type Props = {
+interface ArticleCoverProps {
   category: string;
-  title?: string;
-  size?: 'card' | 'hero';
-};
+  title: string;
+  /** "hero" is the large cover on the article page. Anything else is a card thumbnail. */
+  size?: 'hero' | 'card';
+  /** Optional: pass an image path directly instead of looking it up by title. */
+  image?: string;
+}
 
-/** Cover images live in /public/assets/news. Unknown categories fall back to the Piles cover. */
-const COVERS: Record<string, string> = {
-  Piles: '/assets/news/cover-piles.png',
-  Fistula: '/assets/news/cover-fistula.png',
-  Symptoms: '/assets/news/cover-symptoms.png',
-  Treatment: '/assets/news/cover-treatment.png',
-  Causes: '/assets/news/cover-causes.png',
-  Fissure: '/assets/news/cover-fissure.png',
-  Lifestyle: '/assets/news/cover-lifestyle.png',
-  Pilonidal: '/assets/news/cover-pilonidal.png',
-  Guidance: '/assets/news/cover-guidance.png',
-  Visit: '/assets/news/cover-visit.png',
-};
+/**
+ * Cover image for a blog article.
+ * The image comes from `article.image` in lib/newsData.ts (found by title),
+ * so the index page, article page and home carousel all show the same cover.
+ */
+export default function ArticleCover({ category, title, size = 'card', image }: ArticleCoverProps) {
+  const src = image ?? NEWS_ARTICLES.find((a) => a.title === title)?.image;
+  const ratio = size === 'hero' ? '16 / 9' : '16 / 10';
 
-export default function ArticleCover({ category, title, size = 'card' }: Props) {
-  const src = COVERS[category] ?? COVERS.Piles;
   return (
-    <div className={`article-cover article-cover-img article-cover-${size}`}>
-      <Image
-        src={src}
-        alt={title ?? `${category} article cover`}
-        width={1600}
-        height={870}
-        sizes={size === 'hero' ? '(max-width: 900px) 100vw, 800px' : '(max-width: 900px) 100vw, 33vw'}
-        className="article-cover-photo"
-      />
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: ratio,
+        overflow: 'hidden',
+        background: '#f3f2ff',
+      }}
+    >
+      {src ? (
+        <Image
+          src={src}
+          alt={`${category}: ${title}`}
+          fill
+          unoptimized
+          priority={size === 'hero'}
+          sizes={size === 'hero' ? '(max-width: 900px) 100vw, 800px' : '(max-width: 640px) 100vw, 400px'}
+          style={{ objectFit: 'cover' }}
+        />
+      ) : (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #f3f2ff, #dedcfb)',
+            color: '#4749bd',
+            fontWeight: 700,
+            fontSize: size === 'hero' ? 28 : 18,
+          }}
+        >
+          {category}
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { toast } from '@/components/ui/Toast';
 import { useClinicSettings } from '@/lib/useClinicSettings';
 import { formatSlotLabel } from '@/lib/slots';
 import { BOOKABLE_DOCTORS } from '@/lib/doctorsTeam';
+import { CLINIC } from '@/lib/clinicInfo';
 import './booking.css';
 import './booking-doctor.css';
 
@@ -89,9 +90,22 @@ declare global {
   }
 }
 
-const RAZORPAY_KEY_ID =
-  process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TnHamcVIUGKBfj';
+// Set NEXT_PUBLIC_RAZORPAY_KEY_ID in .env.local with Gastroworld's own Razorpay key.
+const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '';
+
+// TODO: confirm Gastroworld's actual consultation fee (carried over from the old project).
 const CONSULTATION_FEE_INR = 500;
+
+const CONSULTATION_REASONS = [
+  'Gastroenterology diseases',
+  'Liver related diseases',
+  'Liver transplant counselling',
+  'Gallbladder & Pancreas diseases',
+  'Gastrointestinal cancers',
+  'Endoscopy / Colonoscopy / ERCP',
+  'Nutritional counselling',
+  'Other / General Consultation',
+];
 
 function loadRazorpayCheckoutScript(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -575,7 +589,7 @@ export default function AppointmentForm() {
     }
   }, [formData.date, isSunday]);
 
-  // Validate form, verify slot availability, and directly open Razorpay Checkout for ₹800
+  // Validate form, verify slot availability, and directly open Razorpay Checkout
   const handlePayAndBookSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPaymentError(null);
@@ -717,7 +731,7 @@ export default function AppointmentForm() {
         meetLink: result.meetLink,
         googleCalendarUrl: result.googleCalendarUrl,
         googleConnected: result.googleConnected,
-        doctorEmail: result.doctorEmail || 'shivrajrbabar@gmail.com',
+        doctorEmail: result.doctorEmail || CLINIC.email,
       });
 
       // Refresh booked slots on this date so it's locked immediately
@@ -752,10 +766,20 @@ export default function AppointmentForm() {
     }
   };
 
-  // Launch Razorpay Checkout for ₹800 directly
+  // Launch Razorpay Checkout for the consultation fee
   const handleRazorpayPayment = async () => {
     setPaymentError(null);
     setIsProcessingPayment(true);
+
+    if (!RAZORPAY_KEY_ID) {
+      const keyError =
+        'Online payment is not configured yet. Please call the clinic to book your appointment.';
+      console.error('NEXT_PUBLIC_RAZORPAY_KEY_ID is not set.');
+      setPaymentError(keyError);
+      toast.error(keyError, 'Payment Not Configured');
+      setIsProcessingPayment(false);
+      return;
+    }
 
     const scriptLoaded = await loadRazorpayCheckoutScript();
     if (!scriptLoaded || !window.Razorpay) {
@@ -771,9 +795,9 @@ export default function AppointmentForm() {
 
     const options: RazorpayOptions = {
       key: RAZORPAY_KEY_ID,
-      amount: CONSULTATION_FEE_INR * 100, // 80000 paise = ₹800
+      amount: CONSULTATION_FEE_INR * 100, // amount in paise
       currency: 'INR',
-      name: 'Happy Morning Piles Clinic',
+      name: CLINIC.name,
       description: `Consultation on ${formData.date} at ${selectedSlotLabel}`,
       prefill: {
         name: formData.fullName.trim(),
@@ -966,13 +990,6 @@ export default function AppointmentForm() {
             <p>Pick your location, date and time, then tell us a little about you. Choosing a doctor is optional.</p>
           </div>
           <div className="bk-top-meta">
-            {/* <span>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              9:00 AM – 6:00 PM, Mon – Sat
-            </span> */}
             <span className="bk-fee">Consultation fee ₹{CONSULTATION_FEE_INR}</span>
           </div>
         </div>
@@ -1069,7 +1086,7 @@ export default function AppointmentForm() {
             </section>
             </div>
 
-            {/* 1. DATE */}
+            {/* 3. DATE */}
             <section className={`bk-col bk-col-date ${errors.date ? 'invalid' : ''}`} ref={calendarSectionRef}>
               <header className="bk-col-head">
                 <span className="bk-step">3</span>
@@ -1106,7 +1123,7 @@ export default function AppointmentForm() {
               )}
             </section>
 
-            {/* 2. TIME */}
+            {/* 4. TIME */}
             <section className={`bk-col bk-col-time ${errors.time ? 'invalid' : ''}`} ref={slotSectionRef}>
               <header className="bk-col-head">
                 <span className="bk-step">4</span>
@@ -1187,7 +1204,7 @@ export default function AppointmentForm() {
 
             </div>
 
-            {/* 3. DETAILS */}
+            {/* 5. DETAILS */}
             <section className="bk-panel bk-panel-details bk-col-details">
               <header className="bk-col-head">
                 <span className="bk-step">5</span>
@@ -1298,12 +1315,11 @@ export default function AppointmentForm() {
                     disabled={isBusy}
                   >
                     <option value="">Select a reason</option>
-                    <option>Piles (Bavasir / Mulvyadh)</option>
-                    <option>Fissure</option>
-                    <option>Fistula (Bhagandar)</option>
-                    <option>Pilonidal Sinus</option>
-                    <option>Stomach-Related Ailments</option>
-                    <option>Other / General Consultation</option>
+                    {CONSULTATION_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
                   </select>
                   <p className="bk-err" id="reason-error">{errors.reason}</p>
                 </div>

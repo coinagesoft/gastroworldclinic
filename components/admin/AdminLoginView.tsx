@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { CLINIC } from '@/lib/clinicInfo';
 import { IconArrowRight } from './AdminIcons';
 
 interface AdminLoginViewProps {
@@ -38,7 +39,7 @@ export default function AdminLoginView({
               <path d="M12 2v20M2 12h20" />
             </svg>
           </div>
-          <h2>Happy Morning Piles Clinic</h2>
+          <h2>{CLINIC.name}</h2>
           <p>Role-Based Staff &amp; Administrative Portal</p>
         </div>
 
@@ -73,7 +74,7 @@ export default function AdminLoginView({
                   type="email"
                   id="admin-email"
                   autoComplete="username"
-                  placeholder="name@happymorning.com"
+                  placeholder="name@gastroworldclinic.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="admin-auth-input"

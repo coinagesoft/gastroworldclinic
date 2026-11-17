@@ -2,10 +2,11 @@ import ArticleCover from '@/components/ArticleCover';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { NEWS_ARTICLES } from '@/lib/newsData';
+import { CLINIC } from '@/lib/clinicInfo';
 
 export const metadata: Metadata = {
-  title: 'Health Guides on Piles, Fissure & Fistula',
-  description: 'Simple guides on piles, fissure, fistula and Ayurvedic injection therapy from Happy Morning Piles Clinic, Akurdi, PCMC, Pune.',
+  title: `Health Guides on Digestive & Liver Health | ${CLINIC.name}`,
+  description: `Simple guides on liver, endoscopy, acidity, gallbladder and pancreas health from ${CLINIC.name}, ${CLINIC.address.area}.`,
 };
 
 export default function NewsIndexPage() {
@@ -20,7 +21,7 @@ export default function NewsIndexPage() {
           <span className="meditro-badge-orange">Health Guides</span>
           <h1>Health Guides &amp; Information</h1>
           <p className="banner-subtext">
-            Plain-language information on piles, fissure, fistula and Ayurvedic injection therapy from Happy Morning Piles Clinic.
+            Plain-language information on liver, digestive, gallbladder and pancreas health from {CLINIC.name}.
           </p>
 
           <div className="meditro-breadcrumb">
@@ -32,7 +33,7 @@ export default function NewsIndexPage() {
               <span>Home</span>
             </Link>
             <span className="breadcrumb-sep">/</span>
-            <span className="breadcrumb-current">News &amp; Insights</span>
+            <span className="breadcrumb-current">Health Guides</span>
           </div>
         </div>
 
@@ -50,7 +51,7 @@ export default function NewsIndexPage() {
             <span className="meditro-badge-orange">Featured Guides</span>
             <h2>Know Your Condition Before You Visit</h2>
             <p className="section-lead-p">
-              Read about the symptoms, types and treatment approach for common anorectal conditions.
+              Read about the symptoms, causes and warning signs of common digestive and liver conditions.
             </p>
           </div>
 
@@ -79,7 +80,7 @@ export default function NewsIndexPage() {
                     {article.summary}
                   </p>
 
-                    <div className="news-card-bottom">
+                  <div className="news-card-bottom">
                     <Link href={`/news/${article.slug}`} className="btn-news-more">
                       <span>Read Full Article</span>
                       <span className="news-arrow-box" aria-hidden="true">
@@ -98,7 +99,9 @@ export default function NewsIndexPage() {
           <div className="news-page-cta-card">
             <div>
               <h3>Have Questions About Your Symptoms?</h3>
-              <p>Consult Dr. Mahesh Shete, Piles &amp; Fistula Specialist, at Happy Morning Piles Clinic, Akurdi.</p>
+              <p>
+                Consult {CLINIC.doctor.name}, {CLINIC.doctor.title}, at {CLINIC.name}, {CLINIC.address.area}.
+              </p>
             </div>
             <Link href="/appointment" className="btn-meditro-orange">
               Book Appointment

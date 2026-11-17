@@ -5,7 +5,7 @@ import { CLINIC } from '@/lib/clinicInfo';
 
 export const metadata: Metadata = {
   title: 'Book an Appointment',
-  description: 'Book an appointment with Dr. Mahesh Shete at Happy Morning Piles Clinic, Akurdi, PCMC, Pune.',
+  description: `Book an appointment with ${CLINIC.doctor.name} at ${CLINIC.name}, ${CLINIC.address.area}.`,
 };
 
 export default function AppointmentPage() {
@@ -50,7 +50,7 @@ export default function AppointmentPage() {
             <span className="meditro-badge-orange" style={{ marginBottom: '12px' }}>
               Clinic Info
             </span>
-            <h2>Happy Morning Piles Clinic</h2>
+            <h2>{CLINIC.name}</h2>
             <div className="bk-clinic-rows">
               <div className="info-item">
                 <span>Address</span>
@@ -89,7 +89,7 @@ export default function AppointmentPage() {
                 <span className="trust-check">✓</span>
                 <div>
                   <strong>In-Clinic or Online</strong>
-                  <p>Clinic visit at Akurdi, PCMC or a Google Meet link</p>
+                  <p>Clinic visit at {CLINIC.address.area} or a Google Meet link</p>
                 </div>
               </li>
               <li>
