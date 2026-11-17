@@ -7,7 +7,6 @@ import ThemedDatePicker from './ThemedDatePicker';
 import { toast } from '@/components/ui/Toast';
 import { useClinicSettings } from '@/lib/useClinicSettings';
 import { expandBookedTimes } from '@/lib/slots';
-import { TEAM, getDoctorBySlug } from '@/lib/doctorsTeam';
 import SlotSettingsCard from './SlotSettingsCard';
 
 const PRESET_REASONS = [
@@ -23,7 +22,10 @@ interface DoctorAvailabilityManagerProps {
   appointments?: Appointment[];
   onRefresh: () => void | Promise<void>;
   onOverridesChange?: (nextOverrides: DoctorOverride[]) => void;
-  /** Set for a doctor login: this screen then only ever manages that doctor. */
+  /**
+   * Optional and kept only so existing callers still compile. This clinic has a single doctor,
+   * so normally nothing is passed and every timing / leave rule is clinic-wide.
+   */
   doctorSlug?: string;
 }
 
@@ -34,14 +36,11 @@ export default function DoctorAvailabilityManager({
   onOverridesChange,
   doctorSlug,
 }: DoctorAvailabilityManagerProps) {
-  // A doctor login manages only their own timings and leave. An admin (no doctor attached)
-  // can pick which doctor to manage, or leave it on the clinic-wide defaults.
-  const [pickedDoctor, setPickedDoctor] = useState('');
-  const activeDoctor = doctorSlug || pickedDoctor;
-  const activeDoctorName = getDoctorBySlug(activeDoctor)?.name;
+  // Single-doctor clinic: no doctor picker. Timings and leave are saved clinic-wide.
+  const activeDoctor = doctorSlug || '';
   const { slots: UNION_SLOTS, slotsForDate, step } = useClinicSettings(activeDoctor || 'default');
 
-  // Leave that applies to the doctor being managed (their own + clinic-wide)
+  // Leave that applies to the clinic (and to the doctor slug, if one was passed in)
   const relevantOverrides = React.useMemo(
     () => overrides.filter((o) => !o.doctorSlug || o.doctorSlug === activeDoctor),
     [overrides, activeDoctor]
@@ -257,23 +256,6 @@ export default function DoctorAvailabilityManager({
 
   return (
     <div className="admin-availability-section">
-      {/* Informational Guidance Banner */}
-      {/* <div className="admin-info-banner">
-        <div className="banner-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="12" y1="8" x2="12" y2="12"></line>
-            <line x1="12" y1="16" x2="12.01" y2="16"></line>
-          </svg>
-        </div>
-        <div>
-          <strong>Doctor Leave &amp; Blackout Management</strong>
-          <p>
-            Block entire days (e.g. Next Monday) or individual consultation slots. Overrides take effect immediately across the patient booking portal and prevent double-booking.
-          </p>
-        </div>
-      </div> */}
-
       {feedback && (
         <div className={`admin-alert alert-${feedback.type}`} role="status">
           {feedback.message}
@@ -281,39 +263,13 @@ export default function DoctorAvailabilityManager({
       )}
 
       {/* Appointment duration + buffer + working hours */}
-      {!doctorSlug && (
-        <div className="availability-card" style={{ marginBottom: 16 }}>
-          <h3 className="card-heading">Which doctor are you managing?</h3>
-          <p className="card-subhead">
-            Timings, leave and blocked slots are saved for the doctor you pick here, and only
-            change that doctor&apos;s calendar.
-          </p>
-          <select
-            value={pickedDoctor}
-            onChange={(e) => {
-              setPickedDoctor(e.target.value);
-              setSelectedSlots([]);
-            }}
-            style={{ width: '100%', maxWidth: 360, padding: '10px 12px', borderRadius: 10 }}
-          >
-            <option value="">Clinic defaults (used when a doctor has no timings of their own)</option>
-            {TEAM.filter((m) => m.bookable !== false).map((m) => (
-              <option key={m.slug} value={m.slug}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Appointment duration + buffer + working hours (saved for the doctor being managed) */}
       <SlotSettingsCard key={activeDoctor || 'default'} doctorSlug={activeDoctor} onSaved={onRefresh} />
 
       <div className="availability-layout-grid">
         {/* Availability Form Card */}
         <div className="availability-card form-card">
           <h3 className="card-heading">Set Unavailability / Blackout</h3>
-          <p className="card-subhead">Specify dates or hours when {activeDoctorName || (doctorSlug ? 'you' : 'the clinic')} will not take appointments.</p>
+          <p className="card-subhead">Specify dates or hours when the doctor will not take appointments.</p>
 
           <form onSubmit={handleSubmit} className="availability-form">
             <div className="form-group datepicker-form-group">
@@ -481,7 +437,6 @@ export default function DoctorAvailabilityManager({
                 <thead>
                   <tr>
                     <th>Date</th>
-                    {!doctorSlug && <th>Doctor</th>}
                     <th>Type</th>
                     <th>Blocked Details</th>
                     <th>Reason</th>
@@ -511,13 +466,6 @@ export default function DoctorAvailabilityManager({
                             <span>{weekdayLabel || item.date}</span>
                           </div>
                         </td>
-                        {!doctorSlug && (
-                          <td className="col-override-doctor">
-                            <span className="override-reason-text">
-                              {getDoctorBySlug(item.doctorSlug)?.name || 'Whole clinic'}
-                            </span>
-                          </td>
-                        )}
                         <td className="col-override-type">
                           <span className={`override-type-pill ${item.type}`}>
                             {item.type === 'full_day' ? 'Full Day Off' : 'Partial Slots'}

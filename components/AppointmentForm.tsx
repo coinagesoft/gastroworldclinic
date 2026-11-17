@@ -1,18 +1,23 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import CalendarPicker from './CalendarPicker';
 import { toast } from '@/components/ui/Toast';
 import { useClinicSettings } from '@/lib/useClinicSettings';
 import { formatSlotLabel } from '@/lib/slots';
-import { BOOKABLE_DOCTORS } from '@/lib/doctorsTeam';
 import { CLINIC } from '@/lib/clinicInfo';
 import './booking.css';
 import './booking-doctor.css';
 
+// Single-doctor clinic: there is no doctor picker. Timings, leave and booked slots are clinic-wide.
+// Change this name if the doctor shown on the confirmation / Razorpay notes should differ.
+const DOCTOR_NAME = 'Dr. Manoj Kolhe';
+
+// Key used for the client-side slot cache (one doctor, so one bucket)
+const CACHE_PREFIX = 'clinic';
+
 interface FormData {
-  doctorSlug: string;
   location: string;
   fullName: string;
   phone: string;
@@ -135,7 +140,6 @@ function loadRazorpayCheckoutScript(): Promise<boolean> {
 
 export default function AppointmentForm() {
   const [formData, setFormData] = useState<FormData>({
-    doctorSlug: '',
     location: '',
     fullName: '',
     phone: '',
@@ -146,15 +150,9 @@ export default function AppointmentForm() {
     time: '',
     message: '',
   });
-  // Timings (days, hours, locations) belong to the doctor the patient picked
-  const clinic = useClinicSettings(formData.doctorSlug || 'default');
+  // Timings (days, hours, locations) come from the clinic defaults
+  const clinic = useClinicSettings('default');
 
-  // Latest chosen doctor, readable from timers/effects that captured an older render
-  const doctorSlugRef = useRef('');
-  doctorSlugRef.current = formData.doctorSlug;
-  const selectedDoctor = BOOKABLE_DOCTORS.find((d) => d.slug === formData.doctorSlug);
-
-  const [bookingStep, setBookingStep] = useState<1 | 2>(1);
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [isCheckingSlot, setIsCheckingSlot] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -195,7 +193,6 @@ export default function AppointmentForm() {
   const [googleMessage, setGoogleMessage] = useState<string | null>(null);
 
   const successBoxRef = useRef<HTMLDivElement>(null);
-  const doctorSectionRef = useRef<HTMLDivElement>(null);
   const locationSectionRef = useRef<HTMLDivElement>(null);
   const calendarSectionRef = useRef<HTMLDivElement>(null);
   const slotSectionRef = useRef<HTMLDivElement>(null);
@@ -206,13 +203,6 @@ export default function AppointmentForm() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const doctorFromUrl = (params.get('doctor') || '').trim().toLowerCase();
-      const preselected =
-        BOOKABLE_DOCTORS.find((d) => d.slug.toLowerCase() === doctorFromUrl) ||
-        (BOOKABLE_DOCTORS.length === 1 ? BOOKABLE_DOCTORS[0] : undefined);
-      if (preselected) {
-        setFormData((prev) => (prev.doctorSlug ? prev : { ...prev, doctorSlug: preselected.slug }));
-      }
       if (params.get('google_connected') === 'true') {
         setGoogleMessage('Google Calendar successfully connected!');
       } else if (params.get('google_error')) {
@@ -225,13 +215,6 @@ export default function AppointmentForm() {
     preloadBulkCalendar();
     loadRazorpayCheckoutScript();
   }, []);
-
-  // Each doctor has their own booked slots, so reload them when the patient switches doctor
-  useEffect(() => {
-    preloadBulkCalendar();
-    fetchDoctorAvailability();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.doctorSlug]);
 
   // Keep an already-open booking page in sync with doctor blackouts set in admin.
   useEffect(() => {
@@ -268,18 +251,13 @@ export default function AppointmentForm() {
   }, [confirmedBooking]);
 
   const preloadBulkCalendar = () => {
-    const doctor = doctorSlugRef.current;
-    fetch(
-      `/api/appointments?bulk=true&t=${Date.now()}${doctor ? `&doctor=${encodeURIComponent(doctor)}` : ''}`,
-      { cache: 'no-store' }
-    )
+    fetch(`/api/appointments?bulk=true&t=${Date.now()}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data.blockedDates)) {
           setDoctorBlockedDates(data.blockedDates);
         }
-        // Booked slots are per doctor; with no doctor chosen, any booking blocks the slot
-        if (doctor === doctorSlugRef.current && data.bookedSlotsByDate) {
+        if (data.bookedSlotsByDate) {
           const docSlotsByDate = data.doctorBlockedSlotsByDate || {};
           const fullLeaves = new Set((data.blockedDates || []).map((b: { date: string }) => b.date));
 
@@ -287,7 +265,7 @@ export default function AppointmentForm() {
             const booked = data.bookedSlotsByDate[d] || [];
             const docBlocked = docSlotsByDate[d] || [];
             const isDocBlocked = fullLeaves.has(d);
-            slotsCacheRef.current.set(`${doctor || 'any'}|${d}`, {
+            slotsCacheRef.current.set(`${CACHE_PREFIX}|${d}`, {
               bookedSlots: Array.from(new Set([...booked, ...docBlocked])),
               doctorBlockedSlots: docBlocked,
               isDoctorBlocked: isDocBlocked,
@@ -296,8 +274,8 @@ export default function AppointmentForm() {
           });
 
           // If current form date is already in cache, set immediately
-          if (formData.date && slotsCacheRef.current.has(`${doctor || 'any'}|${formData.date}`)) {
-            const initialSlot = slotsCacheRef.current.get(`${doctor || 'any'}|${formData.date}`)!;
+          if (formData.date && slotsCacheRef.current.has(`${CACHE_PREFIX}|${formData.date}`)) {
+            const initialSlot = slotsCacheRef.current.get(`${CACHE_PREFIX}|${formData.date}`)!;
             setServerBookedSlots(initialSlot.bookedSlots);
             setDoctorBlockedSlots(initialSlot.doctorBlockedSlots);
             setIsDoctorDateBlocked(initialSlot.isDoctorBlocked);
@@ -309,8 +287,7 @@ export default function AppointmentForm() {
   };
 
   const fetchDoctorAvailability = () => {
-    const doctor = doctorSlugRef.current;
-    fetch(`/api/availability?t=${Date.now()}&doctor=${encodeURIComponent(doctor || 'default')}`, {
+    fetch(`/api/availability?t=${Date.now()}&doctor=default`, {
       cache: 'no-store',
     })
       .then((res) => res.json())
@@ -364,27 +341,13 @@ export default function AppointmentForm() {
     setErrors((prev) => ({ ...prev, location: '', date: '', time: '' }));
   };
 
-  // Patient picks a doctor first; slots then show only that doctor's availability
-  const handleDoctorSelect = (slug: string) => {
-    if (slug === formData.doctorSlug) return;
-    setServerBookedSlots([]);
-    setDoctorBlockedDates([]);
-    setDoctorBlockedSlots([]);
-    setIsDoctorDateBlocked(false);
-    setDoctorBlockReason('');
-    // Every doctor has their own days, hours and locations, so start the schedule again
-    setFormData((prev) => ({ ...prev, doctorSlug: slug, location: '', date: '', time: '' }));
-    setErrors((prev) => ({ ...prev, doctorSlug: '', location: '', date: '', time: '' }));
-  };
-
   // With a single location there is nothing to choose, so it is selected automatically
   useEffect(() => {
-    // (locations follow the chosen doctor, or the clinic defaults when no doctor is chosen)
     if (clinic.isLoaded && !formData.location && clinic.bookableLocations.length === 1) {
       handleLocationSelect(clinic.bookableLocations[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formData.doctorSlug, clinic.isLoaded, clinic.bookableLocations.join('|'), formData.location]);
+  }, [clinic.isLoaded, clinic.bookableLocations.join('|'), formData.location]);
 
   // Fetch booked slots whenever the selected date changes (instant 0ms from cache)
   const fetchBookedSlots = React.useCallback((dateString: string) => {
@@ -397,8 +360,7 @@ export default function AppointmentForm() {
       return;
     }
 
-    const requestedDoctor = formData.doctorSlug;
-    const cacheKey = `${requestedDoctor || 'any'}|${dateString}`;
+    const cacheKey = `${CACHE_PREFIX}|${dateString}`;
 
     // Check fast cache first (< 0.1ms instant UI)
     const cached = slotsCacheRef.current.get(cacheKey);
@@ -412,7 +374,7 @@ export default function AppointmentForm() {
     }
 
     setIsLoadingSlots(true);
-    fetch(`/api/appointments?date=${dateString}${requestedDoctor ? `&doctor=${encodeURIComponent(requestedDoctor)}` : ''}`)
+    fetch(`/api/appointments?date=${dateString}`)
       .then((res) => res.json())
       .then((data) => {
         const slotData = {
@@ -422,8 +384,6 @@ export default function AppointmentForm() {
           doctorBlockReason: data.doctorBlockReason || '',
         };
         slotsCacheRef.current.set(cacheKey, slotData);
-        // Ignore late answers if the patient has already switched to another doctor
-        if (doctorSlugRef.current !== requestedDoctor) return;
         setServerBookedSlots(slotData.bookedSlots);
         setDoctorBlockedSlots(slotData.doctorBlockedSlots);
         setIsDoctorDateBlocked(slotData.isDoctorBlocked);
@@ -432,7 +392,7 @@ export default function AppointmentForm() {
       .catch((err) => console.error('Failed to load booked slots:', err))
       .finally(() => setIsLoadingSlots(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clinic.settings, formData.location, formData.doctorSlug]);
+  }, [clinic.settings, formData.location]);
 
   useEffect(() => {
     if (formData.date) {
@@ -448,9 +408,6 @@ export default function AppointmentForm() {
     const trimmed = value.trim();
 
     switch (name) {
-      case 'doctorSlug':
-        return '';
-
       case 'location':
         return trimmed ? '' : 'Please choose a clinic location.';
 
@@ -614,9 +571,7 @@ export default function AppointmentForm() {
     if (firstInvalidKey) {
       const errorMsg = newErrors[firstInvalidKey] || 'Please check and complete all required fields.';
       toast.warning(errorMsg, 'Required Information');
-      if (firstInvalidKey === 'doctorSlug') {
-        doctorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else if (firstInvalidKey === 'location') {
+      if (firstInvalidKey === 'location') {
         locationSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else if (firstInvalidKey === 'time') {
         slotSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -633,7 +588,7 @@ export default function AppointmentForm() {
     setIsCheckingSlot(true);
     try {
       const res = await fetch(
-        `/api/appointments?date=${formData.date}&location=${encodeURIComponent(formData.location)}${formData.doctorSlug ? `&doctor=${encodeURIComponent(formData.doctorSlug)}` : ''}`
+        `/api/appointments?date=${formData.date}&location=${encodeURIComponent(formData.location)}`
       );
       const data = await res.json();
       if (data.isDoctorBlocked) {
@@ -725,7 +680,7 @@ export default function AppointmentForm() {
         time: result.appointment.time,
         reason: result.appointment.reason,
         location: result.appointment.location,
-        doctorName: result.appointment.doctorName || selectedDoctor?.name,
+        doctorName: result.appointment.doctorName || DOCTOR_NAME,
         paymentId: result.appointment.paymentId || razorpayPaymentId,
         amount: result.appointment.amount || CONSULTATION_FEE_INR,
         meetLink: result.meetLink,
@@ -739,7 +694,6 @@ export default function AppointmentForm() {
 
       // Reset form fields
       setFormData({
-        doctorSlug: formData.doctorSlug,
         location: formData.location,
         fullName: '',
         phone: '',
@@ -813,7 +767,7 @@ export default function AppointmentForm() {
         appointment_date: formData.date,
         appointment_time: formData.time,
         location: formData.location,
-        doctor: selectedDoctor?.name || formData.doctorSlug,
+        doctor: DOCTOR_NAME,
       },
       theme: {
         color: '#565ACF',
@@ -943,7 +897,7 @@ export default function AppointmentForm() {
                 </div>
                 <div>
                   <dt>Doctor</dt>
-                  <dd>{confirmedBooking.doctorName || 'Assigned by the clinic'}</dd>
+                  <dd>{confirmedBooking.doctorName || DOCTOR_NAME}</dd>
                 </div>
                 <div>
                   <dt>Payment</dt>
@@ -987,7 +941,7 @@ export default function AppointmentForm() {
         <div className="bk-top">
           <div>
             <h2>Schedule your consultation</h2>
-            <p>Pick your location, date and time, then tell us a little about you. Choosing a doctor is optional.</p>
+            <p>Pick your location, date and time, then tell us a little about you.</p>
           </div>
           <div className="bk-top-meta">
             <span className="bk-fee">Consultation fee ₹{CONSULTATION_FEE_INR}</span>
@@ -997,47 +951,12 @@ export default function AppointmentForm() {
         <form id="appointment-form" className="bk-form" noValidate ref={formRef} onSubmit={handlePayAndBookSubmit}>
           <div className="bk-cols">
             <div className="bk-panel bk-panel-when">
-            <div className="bk-pick-row">
-            {/* 1. DOCTOR - timings, leave and booked slots are all per doctor */}
-            <section className={`bk-loc ${errors.doctorSlug ? 'invalid' : ''}`} ref={doctorSectionRef}>
-              <header className="bk-col-head">
-                <span className="bk-step">1</span>
-                <div>
-                  <h2>Choose your doctor <span style={{ fontWeight: 500, fontSize: '0.75em', opacity: 0.7 }}>(optional)</span></h2>
-                  <p>Skip this and the clinic will assign a doctor.</p>
-                </div>
-              </header>
-              <div className="bk-fields">
-                <div className="bk-field span-2">
-                  <select
-                    id="doctorSlug"
-                    name="doctorSlug"
-                    aria-label="Choose your doctor"
-                    value={formData.doctorSlug}
-                    onChange={(e) => handleDoctorSelect(e.target.value)}
-                    disabled={isBusy}
-                  >
-                    <option value="">No preference</option>
-                    {BOOKABLE_DOCTORS.map((doc) => (
-                      <option key={doc.slug} value={doc.slug}>
-                        {doc.name}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedDoctor && <p className="bk-doc-role">{selectedDoctor.role}</p>}
-                  {errors.doctorSlug && (
-                    <p className="bk-col-error" id="doctor-error">
-                      {errors.doctorSlug}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            {/* 2. LOCATION */}
+            {/* Single column now that the doctor picker is gone */}
+            <div className="bk-pick-row" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
+            {/* 1. LOCATION */}
             <section className={`bk-loc ${errors.location ? 'invalid' : ''}`} ref={locationSectionRef}>
               <header className="bk-col-head">
-                <span className="bk-step">2</span>
+                <span className="bk-step">1</span>
                 <div>
                   <h2>Choose a location</h2>
                   <p>Where would you like to meet the doctor?</p>
@@ -1086,13 +1005,13 @@ export default function AppointmentForm() {
             </section>
             </div>
 
-            {/* 3. DATE */}
+            {/* 2. DATE */}
             <section className={`bk-col bk-col-date ${errors.date ? 'invalid' : ''}`} ref={calendarSectionRef}>
               <header className="bk-col-head">
-                <span className="bk-step">3</span>
+                <span className="bk-step">2</span>
                 <div>
                   <h2>Choose a date</h2>
-                  <p>{formData.location ? `Days ${selectedDoctor ? selectedDoctor.name : 'the clinic'} sits at ${formData.location}` : "Doctor's visiting days, from tomorrow onwards"}</p>
+                  <p>{formData.location ? `Days ${DOCTOR_NAME} sits at ${formData.location}` : "Doctor's visiting days, from tomorrow onwards"}</p>
                 </div>
               </header>
 
@@ -1123,10 +1042,10 @@ export default function AppointmentForm() {
               )}
             </section>
 
-            {/* 4. TIME */}
+            {/* 3. TIME */}
             <section className={`bk-col bk-col-time ${errors.time ? 'invalid' : ''}`} ref={slotSectionRef}>
               <header className="bk-col-head">
-                <span className="bk-step">4</span>
+                <span className="bk-step">3</span>
                 <div>
                   <h2>Choose a time</h2>
                   <p id="slot-date-note">{slotNote}</p>
@@ -1204,13 +1123,13 @@ export default function AppointmentForm() {
 
             </div>
 
-            {/* 5. DETAILS */}
+            {/* 4. DETAILS */}
             <section className="bk-panel bk-panel-details bk-col-details">
               <header className="bk-col-head">
-                <span className="bk-step">5</span>
+                <span className="bk-step">4</span>
                 <div>
                   <h2>Your details</h2>
-                  <p>All fields required except the doctor and message</p>
+                  <p>All fields required except the message</p>
                 </div>
               </header>
 
@@ -1223,7 +1142,6 @@ export default function AppointmentForm() {
                     <span>
                       <strong>{shortDate}</strong> at <strong>{selectedSlotLabel}</strong>
                       {selectedLocation ? <> &middot; {selectedLocation}</> : null}
-                      {selectedDoctor ? <> &middot; {selectedDoctor.name}</> : null}
                     </span>
                   </>
                 ) : (
