@@ -282,6 +282,14 @@ export async function ensureDatabaseSchema(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS whatsapp_auth (
+      file_name VARCHAR(255) PRIMARY KEY,
+      file_data LONGTEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
   global.__schemaInitialized = true;
   })();
 
