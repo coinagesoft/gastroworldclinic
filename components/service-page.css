@@ -47,8 +47,8 @@
 .svc-checklist li { position: relative; padding-left: 28px; }
 .svc-checklist li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--svc-accent); font-weight: 800; }
 
-.svc-img { display: block; width: 100%; height: auto; border-radius: 12px; background: #fff; border: 1px solid var(--svc-border); }
-.svc-intro-img { border: 0; }
+.svc-img { display: block; width: 100%; height: auto; border-radius: 12px; background: #fff; border: 1px solid var(--svc-border); margin-inline: auto; }
+.svc-intro-img { border: 0; margin-inline: auto; justify-self: center; }
 .svc-img.is-portrait { max-width: 460px; margin-inline: auto; }
 .svc-img-placeholder { aspect-ratio: 16 / 10; display: grid; place-items: center; color: var(--svc-muted); font-size: .9rem; background: var(--svc-soft); }
 
@@ -130,7 +130,7 @@
 @media (max-width: 900px) {
   .svc-hero { padding: 48px 0 40px; }
   .svc-intro { grid-template-columns: 1fr; gap: 32px; padding-top: 44px; padding-bottom: 44px; }
-  .svc-intro-img { max-width: 340px; }
+  .svc-intro-img { max-width: 340px; margin-inline: auto; justify-self: center; }
   .svc-band { padding: 48px 0; }
   .svc-row,
   .svc-row.has-portrait,

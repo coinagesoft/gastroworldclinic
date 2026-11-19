@@ -19,8 +19,6 @@ import {
   IconPill,
 } from '@/components/admin/AdminIcons';
 import { AdminStats } from '@/components/admin/types';
-import { BOOKABLE_DOCTORS } from '@/lib/doctorsTeam';
-import DoctorCell from '@/components/admin/DoctorCell';
 
 interface AdminAppointmentsTabProps {
   userRole?: string;
@@ -55,7 +53,7 @@ interface AdminAppointmentsTabProps {
   ) => void;
   onDeleteAppointment: (id: string, patientName: string) => void;
   /** Assign a doctor to an appointment ('' = remove the doctor) */
-  onAssignDoctor: (id: string, doctorSlug: string) => void;
+  onAssignDoctor?: (id: string, doctorSlug: string) => void;
 }
 
 export default function AdminAppointmentsTab({
@@ -85,21 +83,13 @@ export default function AdminAppointmentsTab({
   onUpdatePayment,
   onDeleteAppointment,
 }: AdminAppointmentsTabProps) {
-  // Admin / receptionist (and an old-style doctor login) can pick any doctor.
-  // A doctor login can only take unassigned patients for themselves.
-  const canAssignAny =
-    userRole === 'admin' || userRole === 'receptionist' || (userRole === 'doctor' && !userDoctorSlug);
-  const isOwnAppointment = (a: Appointment) => !userDoctorSlug || a.doctorSlug === userDoctorSlug;
   const [sortBy, setSortBy] = React.useState<'latest' | 'oldest' | 'name' | 'amount'>('latest');
-  // 'all' | 'unassigned' (older bookings with no doctor) | a doctor slug
-  const [doctorFilter, setDoctorFilter] = React.useState('all');
 
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
     statusFilter !== 'all' ||
     timeFilter !== 'all' ||
     modeFilter !== 'all' ||
-    doctorFilter !== 'all' ||
     sortBy !== 'latest';
 
   // Group appointments by unique email (or phone/id if no email)
@@ -219,31 +209,6 @@ export default function AdminAppointmentsTab({
     if (modeFilter !== 'all') {
       result = result.filter((a) => a.consultationType === modeFilter);
     }
-    if (doctorFilter !== 'all') {
-      // Rows are grouped per patient, so show each patient's latest booking with the chosen doctor
-      result = result.flatMap((a) => {
-        const matches = a.allBookings.filter((b) =>
-          doctorFilter === 'unassigned' ? !b.doctorSlug : b.doctorSlug === doctorFilter
-        );
-        if (matches.length === 0) return [];
-        const latest = [...matches].sort((x, y) =>
-          `${y.date}T${y.time}`.localeCompare(`${x.date}T${x.time}`)
-        )[0];
-        return [
-          {
-            ...a,
-            ...latest,
-            fullName: a.fullName,
-            phone: a.phone,
-            age: a.age,
-            totalBookingsCount: a.totalBookingsCount,
-            isRepeatPatient: a.isRepeatPatient,
-            allBookings: a.allBookings,
-            firstBooking: a.firstBooking,
-          },
-        ];
-      });
-    }
 
     // Sort order
     result.sort((a, b) => {
@@ -257,14 +222,13 @@ export default function AdminAppointmentsTab({
     });
 
     return result;
-  }, [deduplicatedAppointments, searchQuery, statusFilter, timeFilter, modeFilter, doctorFilter, sortBy]);
+  }, [deduplicatedAppointments, searchQuery, statusFilter, timeFilter, modeFilter, sortBy]);
 
   const handleResetFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
     setTimeFilter('all');
     setModeFilter('all');
-    setDoctorFilter('all');
     setSortBy('latest');
   };
 
@@ -366,37 +330,6 @@ export default function AdminAppointmentsTab({
               <option value="all">All Modes ({appointments.length})</option>
               <option value="offline">In-Clinic (Offline)</option>
               <option value="online">Online (Google Meet)</option>
-            </select>
-          </div>
-
-          {/* 2b. Doctor Filter */}
-          <div className="filter-select-wrap">
-            <span className="filter-icon-box" aria-hidden="true">
-              <IconFilter size={14} />
-            </span>
-            <select
-              className="directory-filter-select"
-              value={doctorFilter}
-              onChange={(e) => setDoctorFilter(e.target.value)}
-              aria-label="Filter by doctor"
-            >
-              {userDoctorSlug ? (
-                <>
-                  <option value="all">All (mine + unassigned)</option>
-                  <option value={userDoctorSlug}>My patients</option>
-                  <option value="unassigned">Unassigned (available to take)</option>
-                </>
-              ) : (
-                <>
-                  <option value="all">All Doctors</option>
-                  {BOOKABLE_DOCTORS.map((d) => (
-                    <option key={d.slug} value={d.slug}>
-                      {d.name}
-                    </option>
-                  ))}
-                  <option value="unassigned">Not assigned to a doctor</option>
-                </>
-              )}
             </select>
           </div>
 
@@ -529,7 +462,6 @@ export default function AdminAppointmentsTab({
                   <tr>
                     <th>Date &amp; Time</th>
                     <th>Mode</th>
-                    <th>Doctor</th>
                     <th>Patient Details</th>
                     <th>Health Concern</th>
                     <th>Status</th>
@@ -554,17 +486,6 @@ export default function AdminAppointmentsTab({
                         >
                           {appt.consultationType === 'offline' ? 'In-Clinic' : 'Online Meet'}
                         </span>
-                      </td>
-                      <td>
-                        <DoctorCell
-                          slug={appt.doctorSlug}
-                          name={appt.doctorName}
-                          patientName={appt.fullName}
-                          canAssignAny={canAssignAny}
-                          userDoctorSlug={userDoctorSlug}
-                          cancelled={appt.status === 'cancelled'}
-                          onAssign={(doctorSlug) => onAssignDoctor(appt.id, doctorSlug)}
-                        />
                       </td>
                       <td>
                         <div className="cell-patient">
@@ -613,8 +534,6 @@ export default function AdminAppointmentsTab({
                               e.target.value as 'confirmed' | 'completed' | 'cancelled'
                             )
                           }
-                          disabled={!isOwnAppointment(appt)}
-                          title={!isOwnAppointment(appt) ? 'Assign this patient to yourself first' : undefined}
                           className={`status-dropdown status-${appt.status || 'confirmed'}`}
                         >
                           <option value="confirmed">Confirmed</option>
@@ -655,7 +574,7 @@ export default function AdminAppointmentsTab({
                             <span>Notes</span>
                           </button>
 
-                          {userRole !== 'receptionist' && isOwnAppointment(appt) && (
+                          {userRole !== 'receptionist' && (
                             <button
                               type="button"
                               className="action-pill action-pill-rx"
