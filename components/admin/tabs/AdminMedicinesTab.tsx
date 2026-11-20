@@ -774,7 +774,7 @@ export default function AdminMedicinesTab({
 
     XLSX.utils.book_append_sheet(wb, ws1, 'Medicines');
     XLSX.utils.book_append_sheet(wb, ws2, 'Doctor_Guide_Instructions');
-    XLSX.writeFile(wb, 'Happy_Morning_Clinic_Medicines_Sample_Template.xlsx');
+    XLSX.writeFile(wb, 'Gastroworld_Clinic_Sample_Template.xlsx');
     toast.success('Sample Medicines Template (.xlsx) downloaded successfully.');
     setIsSampleDropdownOpen(false);
   };
@@ -838,7 +838,7 @@ export default function AdminMedicinesTab({
 
     XLSX.utils.book_append_sheet(wb, ws1, 'Categories');
     XLSX.utils.book_append_sheet(wb, ws2, 'Instructions');
-    XLSX.writeFile(wb, 'Happy_Morning_Clinic_Categories_Sample_Template.xlsx');
+    XLSX.writeFile(wb, 'GastroWorld_Clinic_Categories_Sample_Template.xlsx');
     toast.success('Sample Categories Template (.xlsx) downloaded successfully.');
     setIsSampleDropdownOpen(false);
   };
@@ -864,7 +864,7 @@ export default function AdminMedicinesTab({
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Remedies');
     const today = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(wb, `Happy_Morning_Clinic_Medicines_${today}.xlsx`);
+    XLSX.writeFile(wb, `Gastroworld_Clinic_Medicines_${today}.xlsx`);
     toast.success(`Exported ${medicines.length} medicines to Excel.`);
   };
 
