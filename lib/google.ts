@@ -13,6 +13,9 @@ import {
 
 export const DOCTOR_EMAIL = process.env.DOCTOR_EMAIL || 'shivrajrbabar@gmail.com';
 
+// Shown in calendar invites when an appointment has no amount saved (matches the online booking fee).
+const DEFAULT_CONSULTATION_FEE = 500;
+
 const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar',
@@ -134,7 +137,7 @@ Email: ${appointment.email}
 Age: ${appointment.age}
 Reason for Visit: ${appointment.reason}
 Consultation Mode: In-Person (Offline Clinic Visit)
-Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || 800}) - ${appointment.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE}) - ${appointment.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
 Notes: ${appointment.notes || appointment.message || 'Please arrive at the clinic 10 minutes prior to your slot.'}
 
 Clinic Address:
@@ -150,7 +153,7 @@ Email: ${appointment.email}
 Age: ${appointment.age}
 Reason for Visit: ${appointment.reason}
 Consultation Mode: Online Video (Google Meet)
-Payment: ${appointment.paymentMethod || 'Online'} (₹${appointment.amount || 800})
+Payment: ${appointment.paymentMethod || 'Online'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE})
 Notes: ${appointment.notes || appointment.message || 'Please join the Google Meet link 5 minutes before scheduled slot.'}
 
 Doctor Contact: ${CLINIC.phone.display}
@@ -281,7 +284,7 @@ Email: ${appointment.email}
 Reason for Visit: ${appointment.reason}
 Mode: In-Clinic / In-Person Consultation
 Clinic Address: ${CLINIC.address.full}
-Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || 800})`
+Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE})`
     : `Online Video Consultation (Rescheduled)
 Patient: ${appointment.fullName}
 Phone: ${appointment.phone}
@@ -289,7 +292,7 @@ Email: ${appointment.email}
 Reason for Visit: ${appointment.reason}
 Mode: 📹 Online Video (Google Meet)
 Meet Link: ${appointment.meetLink || 'Generated on Google Calendar'}
-Payment: ${appointment.paymentMethod || 'Online'} (₹${appointment.amount || 800})`;
+Payment: ${appointment.paymentMethod || 'Online'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE})`;
 
   if (appointment.googleEventId) {
     try {
@@ -406,7 +409,7 @@ Phone: ${appointment.phone}
 Email: ${appointment.email}
 Age: ${appointment.age}
 Reason: ${appointment.reason}
-Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || 800})
+Payment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE})
 Notes: ${appointment.notes || appointment.message || 'Please arrive 10 mins early.'}
 
 Clinic Address:
@@ -471,7 +474,7 @@ export function generateIcsContent(
     : appointment.meetLink || 'Google Meet Video Call';
 
   const description = isOffline
-    ? `In-Clinic (Offline) Consultation\\nPatient: ${appointment.fullName}\\nPhone: ${appointment.phone}\\nMode: Offline Visit\\nPayment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || 800})\\nAddress: ${CLINIC.address.full}`
+    ? `In-Clinic (Offline) Consultation\\nPatient: ${appointment.fullName}\\nPhone: ${appointment.phone}\\nMode: Offline Visit\\nPayment: ${appointment.paymentMethod || 'Cash'} (₹${appointment.amount || DEFAULT_CONSULTATION_FEE})\\nAddress: ${CLINIC.address.full}`
     : `Online Consultation\\nPatient: ${appointment.fullName}\\nPhone: ${appointment.phone}\\nReason: ${appointment.reason}\\nGoogle Meet: ${appointment.meetLink || ''}`;
 
   return [
@@ -481,7 +484,7 @@ export function generateIcsContent(
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
-    `UID:appt-${appointment.id}@happymorningpilesclinic.local`,
+    `UID:appt-${appointment.id}@gastroworldclinic.com`,
     `DTSTAMP:${formatUtc(new Date())}`,
     `DTSTART:${formatUtc(start)}`,
     `DTEND:${formatUtc(end)}`,

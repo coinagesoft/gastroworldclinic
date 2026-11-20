@@ -19,12 +19,12 @@ import { Medicine } from '@/lib/medicines';
 import { useClinicSettings } from '@/lib/useClinicSettings';
 import { IconCross, IconPlus, IconTrash, IconMail, IconRefresh, IconFileText, IconPill, IconEdit, IconCopy, IconCheck } from './AdminIcons';
 
-// Fallback potency list, used only when the selected medicine has no potencies saved in the database.
-const POTENCIES = ['Q', '3X', '6X', '6C', '12C', '30C', '200C', '1M', '10M'];
+// Fallback strength list, used only when the selected medicine has no strengths saved in the database.
+const STRENGTHS = ['5 mg', '10 mg', '20 mg', '40 mg', '100 mg', '250 mg', '500 mg', '650 mg', '5 ml', '10 ml'];
 
 // One-click suggestions so the doctor rarely has to type quantity / duration / dose.
-const QTY_OPTIONS = ['4 pills', '5 pills', '6 pills', '8 pills', '10 pills', '5 drops', '10 drops', '1 tsp', '1/2 tsp', '1 dram'];
-const DURATION_OPTIONS = ['3 days', '5 days', '7 days', '10 days', '14 days', '15 days', '1 month', '2 months', 'SOS'];
+const QTY_OPTIONS = ['5 tablets', '6 tablets', '10 tablets', '15 tablets', '30 tablets', '1 strip', '1 bottle', '100 ml', '200 ml', '1 sachet', '1 tube'];
+const DURATION_OPTIONS = ['3 days', '5 days', '7 days', '10 days', '14 days', '15 days', '1 month', '2 months', '3 months', 'SOS'];
 const DOSE_PRESETS = ['1-0-1', '1-1-1', '1-0-0', '0-1-0', '0-0-1', '1-1-0', '0-1-1'];
 const FOOD_OPTIONS: { value: PrescriptionMedicine['timing']; label: string }[] = [
   { value: 'any', label: 'Any time' },
@@ -424,7 +424,7 @@ export default function PrescriptionModal({
       .sort((a, b) => a.localeCompare(b));
   }, [availableMedicines]);
 
-  // Potency suggestions for a given remedy: that remedy's saved potencies from the DB,
+  // Strength suggestions for a given medicine: its saved strengths from the DB,
   // falling back to the standard list only if none are saved.
   const potencyOptionsFor = (remedyName: string): string[] => {
     const matched = (availableMedicines || []).find(
@@ -437,7 +437,7 @@ export default function PrescriptionModal({
         .filter(Boolean);
       if (list.length) return Array.from(new Set(list));
     }
-    return POTENCIES;
+    return STRENGTHS;
   };
 
   // While the QR panel is open: poll the connection status, and send automatically once linked
@@ -683,7 +683,7 @@ export default function PrescriptionModal({
     setTimeout(() => setFlashIndex((cur) => (cur === index ? null : cur)), 1600);
   };
 
-  /** Copies a row right below itself and opens it for editing (same medicine, different potency etc.). */
+  /** Copies a row right below itself and opens it for editing (same medicine, different strength etc.). */
   const duplicateMed = (index: number) => {
     const copy = { ...medicines[index] };
     setMedicines((prev) => {
@@ -1069,10 +1069,10 @@ export default function PrescriptionModal({
                   />
                 </label>
                 <label className="rx-field rx2-potency">
-                  <span>Potency</span>
+                  <span>Strength</span>
                   <SuggestInput
                     className="rx-input"
-                    placeholder="e.g. 30C"
+                    placeholder="e.g. 40 mg"
                     options={potencyOptionsFor(entry.name)}
                     value={entry.potency}
                     onChange={(v) => updateEntry({ potency: v })}
@@ -1083,7 +1083,7 @@ export default function PrescriptionModal({
                   <span>Quantity</span>
                   <SuggestInput
                     className="rx-input"
-                    placeholder="e.g. 4 pills"
+                    placeholder="e.g. 10 tablets"
                     options={QTY_OPTIONS}
                     value={entry.quantity}
                     onChange={(v) => updateEntry({ quantity: v })}
@@ -1160,7 +1160,7 @@ export default function PrescriptionModal({
                   <span>Special instructions (optional)</span>
                   <input
                     type="text"
-                    placeholder="e.g. Dissolve under the tongue, avoid mint/coffee 30 min before"
+                    placeholder="e.g. Take on an empty stomach, 30 minutes before breakfast"
                     value={entry.instructions}
                     onChange={(e) => updateEntry({ instructions: e.target.value })}
                   />
@@ -1180,7 +1180,7 @@ export default function PrescriptionModal({
 
               {showTips && (
               <p className="rx2-shortcuts">
-                <strong>Fast flow:</strong> type medicine → <kbd>Enter</kbd> adds it (best match is picked; potency, qty, dose, food and duration repeat from the last one).
+                <strong>Fast flow:</strong> type medicine → <kbd>Enter</kbd> adds it (best match is picked; strength, qty, dose, food and duration repeat from the last one).
                 Change only what differs with <kbd>Tab</kbd>: dose <kbd>B</kbd> = 1-0-1 · <kbd>T</kbd> = 1-1-1 · <kbd>M</kbd>/<kbd>A</kbd>/<kbd>N</kbd> (or type 101) · food <kbd>A</kbd>/<kbd>B</kbd>/<kbd>W</kbd> · <kbd>Enter</kbd> adds ·{' '}
                 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> save · <kbd>Alt</kbd>+<kbd>P</kbd> preview
               </p>
@@ -1457,7 +1457,7 @@ export default function PrescriptionModal({
                   maxLength={LETTERHEAD_LIMITS.doctorName}
                   value={lhDraft.doctorName}
                   onChange={(e) => setLhDraft({ ...lhDraft, doctorName: e.target.value })}
-                  placeholder="e.g. Dr. Mahesh Shete"
+                  placeholder="e.g. Dr. Manoj Kolhe"
                   autoFocus
                 />
               </label>
@@ -1468,7 +1468,7 @@ export default function PrescriptionModal({
                   maxLength={LETTERHEAD_LIMITS.qualification}
                   value={lhDraft.qualification}
                   onChange={(e) => setLhDraft({ ...lhDraft, qualification: e.target.value })}
-                  placeholder="e.g. BAMS | Piles & Fistula Specialist"
+                  placeholder="e.g. Gastroenterologist & Liver Specialist"
                 />
               </label>
               <label className="rx-field">
@@ -1488,7 +1488,7 @@ export default function PrescriptionModal({
                   maxLength={LETTERHEAD_LIMITS.clinicName}
                   value={lhDraft.clinicName}
                   onChange={(e) => setLhDraft({ ...lhDraft, clinicName: e.target.value })}
-                  placeholder="e.g. Happy Morning Piles Clinic"
+                  placeholder="e.g. Gastroworld Clinic"
                 />
               </label>
               <label className="rx-field rx2-lh-wide">
@@ -1508,7 +1508,7 @@ export default function PrescriptionModal({
                   maxLength={LETTERHEAD_LIMITS.phone}
                   value={lhDraft.phone}
                   onChange={(e) => setLhDraft({ ...lhDraft, phone: e.target.value })}
-                  placeholder="e.g. +91 70667 47811"
+                  placeholder="e.g. +91 98765 43210"
                 />
               </label>
             </div>
