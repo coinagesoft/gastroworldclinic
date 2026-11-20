@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import type { WASocket } from '@whiskeysockets/baileys';
@@ -12,7 +13,88 @@ import type { WASocket } from '@whiskeysockets/baileys';
  * long-running Node server (npm run dev / npm start on a VPS), NOT serverless hosting.
  */
 
-const AUTH_DIR = process.env.WHATSAPP_AUTH_DIR || path.join(process.cwd(), '.whatsapp-auth');
+function resolveAuthDir(): string {
+  if (process.env.WHATSAPP_AUTH_DIR) {
+    return process.env.WHATSAPP_AUTH_DIR;
+  }
+  // On Vercel / AWS Lambda / Serverless, process.cwd() is '/var/task' which is read-only.
+  // os.tmpdir() (/tmp) is the only writable directory.
+  const isServerless =
+    Boolean(process.env.VERCEL) ||
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    Boolean(process.env.LAMBDA_TASK_ROOT) ||
+    (typeof process.cwd === 'function' && process.cwd().startsWith('/var/task'));
+
+  if (isServerless) {
+    return path.join(os.tmpdir(), '.whatsapp-auth');
+  }
+
+  return path.join(process.cwd(), '.whatsapp-auth');
+}
+
+const AUTH_DIR = resolveAuthDir();
+
+function ensureAuthDir(): void {
+  try {
+    if (!fs.existsSync(AUTH_DIR)) {
+      fs.mkdirSync(AUTH_DIR, { recursive: true });
+    }
+  } catch (err) {
+    console.warn('[whatsapp] Could not create AUTH_DIR:', err);
+  }
+}
+
+async function restoreAuthFromDb(): Promise<void> {
+  try {
+    const { getPool, ensureDatabaseSchema } = await import('./db');
+    await ensureDatabaseSchema();
+    const pool = getPool();
+    const [rows] = await pool.execute('SELECT file_name, file_data FROM whatsapp_auth');
+    if (Array.isArray(rows) && rows.length > 0) {
+      ensureAuthDir();
+      for (const row of rows as { file_name: string; file_data: string }[]) {
+        const filePath = path.join(AUTH_DIR, row.file_name);
+        fs.writeFileSync(filePath, row.file_data, 'utf-8');
+      }
+      console.log(`[whatsapp] Restored ${rows.length} auth files from DB.`);
+    }
+  } catch (err) {
+    console.warn('[whatsapp] DB auth restore skipped / failed:', err);
+  }
+}
+
+async function syncAuthToDb(): Promise<void> {
+  try {
+    if (!fs.existsSync(AUTH_DIR)) return;
+    const { getPool, ensureDatabaseSchema } = await import('./db');
+    await ensureDatabaseSchema();
+    const pool = getPool();
+    const files = fs.readdirSync(AUTH_DIR);
+    for (const file of files) {
+      const filePath = path.join(AUTH_DIR, file);
+      if (fs.statSync(filePath).isFile()) {
+        const content = fs.readFileSync(filePath, 'utf-8');
+        await pool.execute(
+          'INSERT INTO whatsapp_auth (file_name, file_data) VALUES (?, ?) ON DUPLICATE KEY UPDATE file_data = VALUES(file_data)',
+          [file, content]
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('[whatsapp] DB auth sync skipped / failed:', err);
+  }
+}
+
+async function clearAuthFromDb(): Promise<void> {
+  try {
+    const { getPool, ensureDatabaseSchema } = await import('./db');
+    await ensureDatabaseSchema();
+    const pool = getPool();
+    await pool.execute('DELETE FROM whatsapp_auth');
+  } catch (err) {
+    console.warn('[whatsapp] DB auth clear skipped / failed:', err);
+  }
+}
 
 export type WhatsAppStatus = 'disconnected' | 'connecting' | 'qr' | 'connected';
 
@@ -54,6 +136,9 @@ async function connect(): Promise<void> {
   const makeWASocket = baileys.default;
   const { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = baileys;
 
+  ensureAuthDir();
+  await restoreAuthFromDb();
+
   const { state: auth, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
   let version: [number, number, number] | undefined;
@@ -78,7 +163,10 @@ async function connect(): Promise<void> {
   });
   s.sock = sock;
 
-  sock.ev.on('creds.update', saveCreds);
+  sock.ev.on('creds.update', async () => {
+    await saveCreds();
+    void syncAuthToDb();
+  });
 
   sock.ev.on('connection.update', async (update) => {
     // Ignore events from an old socket that was already replaced
@@ -123,7 +211,10 @@ async function connect(): Promise<void> {
         code === DisconnectReason.multideviceMismatch
       ) {
         // Phone unlinked the device / saved session is invalid -> wipe it so a fresh QR can be shown
-        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        try {
+          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        } catch {}
+        void clearAuthFromDb();
         s.error = 'The saved WhatsApp session was no longer valid and was cleared. A new QR code will appear.';
         s.retryAt = 0;
       } else if (code === DisconnectReason.restartRequired) {
@@ -239,5 +330,8 @@ export async function logoutWhatsApp(): Promise<void> {
   s.phone = null;
   s.error = null;
   s.retryAt = 0;
-  fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+  try {
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+  } catch {}
+  void clearAuthFromDb();
 }
