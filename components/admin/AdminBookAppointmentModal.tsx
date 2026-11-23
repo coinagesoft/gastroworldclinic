@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import ThemedDatePicker from './ThemedDatePicker';
+import CalendarPicker from '../CalendarPicker';
 import { Appointment } from '@/lib/storage';
 import { DoctorOverride } from '@/lib/availability';
 import { toast } from '@/components/ui/Toast';
@@ -10,7 +10,6 @@ import {
   areAllSlotsOccupied,
   DEFAULT_CLINIC_SETTINGS,
   generateSlots,
-  getSlotLocation,
   isClinicClosedOn,
   getWeekday,
   WEEKDAY_NAMES,
@@ -18,19 +17,23 @@ import {
   getSlotStep,
 } from '@/lib/slots';
 import { CLINIC } from '@/lib/clinicInfo';
-import { BOOKABLE_DOCTORS } from '@/lib/doctorsTeam';
-import DoctorBadge from './DoctorBadge';
+import '../booking.css';
+import './AdminBookAppointmentModal.css';
 
 const DEFAULT_SLOT_VALUES = generateSlots(DEFAULT_CLINIC_SETTINGS).map((s) => s.value);
 const DEFAULT_STEP = getSlotStep(DEFAULT_CLINIC_SETTINGS);
 
-const HEALTH_REASONS = [
-  'Piles (Bavasir / Mulvyadh)',
-  'Fissure',
-  'Fistula (Bhagandar)',
-  'Pilonidal Sinus',
-  'Stomach-Related Ailments',
-  'Follow-up Consultation',
+const DEFAULT_REASON = 'Other / General Consultation';
+
+// Same list as the public booking form (AppointmentForm)
+const CONSULTATION_REASONS = [
+  'Gastroenterology diseases',
+  'Liver related diseases',
+  'Liver transplant counselling',
+  'Gallbladder & Pancreas diseases',
+  'Gastrointestinal cancers',
+  'Endoscopy / Colonoscopy / ERCP',
+  'Nutritional counselling',
   'Other / General Consultation',
 ];
 
@@ -118,12 +121,11 @@ export default function AdminBookAppointmentModal({
   onClose,
   onSuccess,
   initialDate,
-  appointments = [],
   overrides = [],
 }: AdminBookAppointmentModalProps) {
-  const { settings, slotValues, step, slotsForDate } = useClinicSettings();
-  // Slots of the selected weekday only (each with its location)
-  // Format today's date in YYYY-MM-DD
+  // Same clinic settings source as the public booking form
+  const clinic = useClinicSettings('default');
+
   const todayIso = useMemo(() => {
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
   }, []);
@@ -134,73 +136,133 @@ export default function AdminBookAppointmentModal({
     return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(d);
   }, []);
 
-  const [consultationType, setConsultationType] = useState<'offline' | 'online'>('offline');
+  const [location, setLocation] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [age, setAge] = useState('');
-  const [reason, setReason] = useState(HEALTH_REASONS[0]);
-  // Empty = walk-in not tied to one doctor (blocks the slot for every doctor)
-  const [doctorSlug, setDoctorSlug] = useState('');
-  const [date, setDate] = useState(() => {
-    if (
-      initialDate &&
-      initialDate > todayIso &&
-      !isClinicDateUnavailable(initialDate, overrides, appointments, slotValues, step, settings).unavailable
-    ) {
-      return initialDate;
-    }
-    return findNextAvailableClinicDate(tomorrowIso, overrides, appointments, slotValues, step, settings);
-  });
+  const [reason, setReason] = useState(DEFAULT_REASON);
+  const [visitType, setVisitType] = useState<'first' | 'follow_up'>('first');
+  const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  // Calendar stays collapsed; the admin works on today's slots by default
+  const [showCalendar, setShowCalendar] = useState(false);
+  // Email + notes stay tucked away so the common walk-in takes a few taps
+  const [showMore, setShowMore] = useState(false);
+  // Which date|location the loaded slot data belongs to (used to auto-pick the first free slot)
+  const [loadedKey, setLoadedKey] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'UPI' | 'Card' | 'Pending'>('Cash');
   const [paymentStatus, setPaymentStatus] = useState<'paid' | 'pending'>('paid');
   const [amount, setAmount] = useState('800');
   const [notes, setNotes] = useState('');
 
-  // Slot availability
+  // Slot availability for the chosen date + location (loaded from the backend)
   const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [doctorBlockedSlots, setDoctorBlockedSlots] = useState<string[]>([]);
+  const [isDoctorDateBlocked, setIsDoctorDateBlocked] = useState(false);
+  const [doctorBlockReason, setDoctorBlockReason] = useState('');
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const [successResult, setSuccessResult] = useState<{
-    id: string;
-    calendarScheduled?: boolean;
-    calendarMessage?: string;
-    meetLink?: string;
-  } | null>(null);
+  const [successResult, setSuccessResult] = useState<{ id: string; location?: string } | null>(null);
 
-  // Sync initial date or fallback to first valid date
-  useEffect(() => {
-    if (
-      initialDate &&
-      initialDate > todayIso &&
-      !isClinicDateUnavailable(initialDate, overrides, appointments, slotValues, step, settings).unavailable
-    ) {
-      setDate(initialDate);
-    } else if (isOpen) {
-      setDate((curr) => {
-        if (
-          curr &&
-          curr > todayIso &&
-          !isClinicDateUnavailable(curr, overrides, appointments, slotValues, step, settings).unavailable
-        ) {
-          return curr;
-        }
-        return findNextAvailableClinicDate(tomorrowIso, overrides, appointments, slotValues, step, settings);
-      });
+  // Full-day leaves from the admin overrides (calendar greys these out)
+  const doctorBlockedDates = useMemo(
+    () =>
+      overrides
+        .filter((o) => o.type === 'full_day')
+        .map((o) => ({ date: o.date, reason: o.reason || '' })),
+    [overrides]
+  );
+
+  // First date from tomorrow on that the doctor sits at the chosen location
+  const findFirstOpenDate = (loc: string): string => {
+    const leaveDates = new Set(doctorBlockedDates.map((b) => b.date));
+    const probe = new Date(`${todayIso}T00:00:00`);
+    for (let i = 0; i < 90; i++) {
+      const iso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(probe);
+      if (!clinic.isClosedOn(iso, loc) && !leaveDates.has(iso)) return iso;
+      probe.setDate(probe.getDate() + 1);
     }
-  }, [initialDate, todayIso, tomorrowIso, overrides, appointments, isOpen, slotValues, step, settings]);
+    return '';
+  };
 
-  // Slots + location of the selected weekday; keep the chosen time valid for that day
-  const daySlots = slotsForDate(date);
-  const selectedLocation = time ? getSlotLocation(settings, date, time) : undefined;
+  const handleLocationSelect = (loc: string) => {
+    if (loc === location) return;
+    setLocation(loc);
+    const leaveDates = new Set(doctorBlockedDates.map((b) => b.date));
+    const preferred =
+      initialDate &&
+      initialDate >= todayIso &&
+      !clinic.isClosedOn(initialDate, loc) &&
+      !leaveDates.has(initialDate)
+        ? initialDate
+        : findFirstOpenDate(loc);
+    setDate(preferred);
+    setTime('');
+    setShowCalendar(false);
+    if (errorMsg) setErrorMsg('');
+  };
+
+  // With a single location there is nothing to choose, so it is selected automatically
   useEffect(() => {
-    if (!date) return;
-    const list = slotsForDate(date);
-    setTime((curr) => (list.some((s) => s.value === curr) ? curr : list[0]?.value ?? ''));
+    if (isOpen && clinic.isLoaded && !location && clinic.bookableLocations.length === 1) {
+      handleLocationSelect(clinic.bookableLocations[0]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, settings]);
+  }, [isOpen, clinic.isLoaded, clinic.bookableLocations.join('|'), location]);
+
+  const handleDateSelect = (dateIso: string) => {
+    setDate(dateIso);
+    setTime('');
+    setShowCalendar(false);
+    if (errorMsg) setErrorMsg('');
+  };
+
+  // Day-wise timings: only the slots of the chosen weekday at the chosen location
+  const SLOTS = clinic.slotsForDate(date, location);
+  const isClosedDay = date && location ? clinic.isClosedOn(date, location) : false;
+  const closedDayName = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'long' })
+    : '';
+  const dateIsBookable = !!date && !!location && !isClosedDay && !isDoctorDateBlocked && date >= todayIso;
+  const dayLocations = Array.from(new Set(SLOTS.map((s) => s.location).filter(Boolean))) as string[];
+  const hasMultipleLocations = dayLocations.length > 1;
+  const selectedSlotLabel = SLOTS.find((s) => s.value === time)?.label || '';
+
+  // Slots whose start time has already passed today cannot be booked
+  const isPastSlot = (value: string): boolean => {
+    if (date !== todayIso) return false;
+    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)?/i.exec(value);
+    if (!m) return false;
+    let h = Number(m[1]);
+    const ap = m[3]?.toUpperCase();
+    if (ap === 'PM' && h < 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    const nowParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+      .format(new Date())
+      .split(':')
+      .map(Number);
+    return h * 60 + Number(m[2]) < nowParts[0] * 60 + nowParts[1];
+  };
+
+  const prettyDate = date
+    ? new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    : '';
+  const leaveDateSet = new Set(doctorBlockedDates.map((b) => b.date));
+  const dateOptionDisabled = (iso: string) =>
+    !location || clinic.isClosedOn(iso, location) || leaveDateSet.has(iso);
 
   // ESC key listener & body scroll lock
   useEffect(() => {
@@ -222,26 +284,33 @@ export default function AdminBookAppointmentModal({
     };
   }, [isOpen]);
 
-  // Load booked slots for chosen date
+  // Load booked / blocked slots for the chosen date + location
   useEffect(() => {
-    if (!isOpen || !date) return;
+    if (!isOpen || !date || !location || clinic.isClosedOn(date, location)) {
+      setBookedSlots([]);
+      setDoctorBlockedSlots([]);
+      setIsDoctorDateBlocked(false);
+      setDoctorBlockReason('');
+      return;
+    }
+
     let isCancelled = false;
 
     async function fetchSlots() {
       setIsLoadingSlots(true);
       try {
         const res = await fetch(
-          `/api/appointments?date=${date}${doctorSlug ? `&doctor=${encodeURIComponent(doctorSlug)}` : ''}`
+          `/api/appointments?date=${date}&location=${encodeURIComponent(location)}&t=${Date.now()}`,
+          { cache: 'no-store' }
         );
         if (res.ok) {
           const data = await res.json();
           if (!isCancelled) {
-            setBookedSlots(data.bookedSlots || []);
-            // If current time is booked, auto-select first free slot
-            if (data.bookedSlots && data.bookedSlots.includes(time)) {
-              const free = daySlots.find((s) => !data.bookedSlots.includes(s.value));
-              if (free) setTime(free.value);
-            }
+            setBookedSlots(Array.isArray(data.bookedSlots) ? data.bookedSlots : []);
+            setDoctorBlockedSlots(Array.isArray(data.doctorBlockedSlots) ? data.doctorBlockedSlots : []);
+            setIsDoctorDateBlocked(Boolean(data.isDoctorBlocked));
+            setDoctorBlockReason(data.doctorBlockReason || '');
+            setLoadedKey(`${date}|${location}`);
           }
         }
       } catch (err) {
@@ -255,16 +324,20 @@ export default function AdminBookAppointmentModal({
     return () => {
       isCancelled = true;
     };
-  }, [date, isOpen, time, doctorSlug]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, location, isOpen, clinic.settings]);
 
-  // When switching consultation type, adjust default payment
-  const handleTypeChange = (type: 'offline' | 'online') => {
-    setConsultationType(type);
-    if (type === 'offline') {
-      setPaymentMethod('Cash');
-      setPaymentStatus('paid');
-    }
-  };
+  // Quick booking: once slots are loaded, pre-select the first free slot
+  useEffect(() => {
+    if (!isOpen || !dateIsBookable || loadedKey !== `${date}|${location}`) return;
+    const isFree = (v: string) =>
+      !bookedSlots.includes(v) && !doctorBlockedSlots.includes(v) && !isPastSlot(v);
+    const firstFree = SLOTS.find((s) => isFree(s.value));
+    setTime((curr) =>
+      curr && SLOTS.some((s) => s.value === curr) && isFree(curr) ? curr : firstFree?.value ?? ''
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedKey, date, location, bookedSlots, doctorBlockedSlots, isOpen, time]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -288,31 +361,20 @@ export default function AdminBookAppointmentModal({
     }
     const cleanPhone = rawPhone;
 
-    // 3. Email Validation
+    // 3. Email (optional - walk-ins are identified by phone)
     const trimmedEmail = email.trim();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    if (!trimmedEmail) {
-      const msg = 'Patient email address is required.';
-      setErrorMsg(msg);
-      toast.warning(msg, 'Email Required');
-      return;
-    }
     if (trimmedEmail && !emailRegex.test(trimmedEmail)) {
       const msg = 'Please enter a valid email address (e.g. name@example.com).';
       setErrorMsg(msg);
+      setShowMore(true);
       toast.warning(msg, 'Invalid Email');
       return;
     }
 
-    // 4. Age Validation
+    // 4. Age (optional)
     let validatedAge = 0;
-    if (!age.trim()) {
-      const msg = 'Please enter the patient age.';
-      setErrorMsg(msg);
-      toast.warning(msg, 'Age Required');
-      return;
-    }
-    {
+    if (age.trim()) {
       const parsedAge = Number(age.trim());
       if (!Number.isInteger(parsedAge) || parsedAge < 1 || parsedAge > 120) {
         const msg = 'Please enter a valid age between 1 and 120 years.';
@@ -324,7 +386,7 @@ export default function AdminBookAppointmentModal({
     }
 
     if (!reason.trim()) {
-      const msg = 'Please select a consultation health concern.';
+      const msg = 'Please select a reason for consultation.';
       setErrorMsg(msg);
       toast.warning(msg, 'Reason Required');
       return;
@@ -337,24 +399,47 @@ export default function AdminBookAppointmentModal({
       return;
     }
 
-    // 5. Date & Time Validation
+    // 5. Location, Date & Time Validation
+    if (!location) {
+      const msg = 'Please choose a clinic location.';
+      setErrorMsg(msg);
+      toast.warning(msg, 'Location Required');
+      return;
+    }
     if (!date || !time) {
       const msg = 'Please select both an appointment date and time slot.';
       setErrorMsg(msg);
       toast.warning(msg, 'Slot Required');
       return;
     }
-    if (date <= todayIso) {
-      const msg = 'Appointments can only be scheduled for future dates (from tomorrow onwards).';
+    if (date < todayIso) {
+      const msg = 'Appointments cannot be scheduled for past dates.';
       setErrorMsg(msg);
       toast.warning(msg, 'Invalid Date');
       return;
     }
-    const unavailableCheck = isClinicDateUnavailable(date, overrides, appointments, slotValues, step, settings);
-    if (unavailableCheck.unavailable) {
-      const msg = unavailableCheck.reason || 'The selected date is unavailable for booking.';
+    if (clinic.isClosedOn(date, location)) {
+      const msg = `The doctor does not take appointments at ${location} on ${closedDayName}s. Please choose another day.`;
       setErrorMsg(msg);
       toast.warning(msg, 'Date Unavailable');
+      return;
+    }
+    if (isDoctorDateBlocked) {
+      const msg = `Doctor is unavailable on ${date}${doctorBlockReason ? ` (${doctorBlockReason})` : ''}.`;
+      setErrorMsg(msg);
+      toast.warning(msg, 'Date Unavailable');
+      return;
+    }
+    if (isPastSlot(time)) {
+      const msg = 'This time slot has already passed today. Please select a later slot.';
+      setErrorMsg(msg);
+      toast.warning(msg, 'Slot Passed');
+      return;
+    }
+    if (bookedSlots.includes(time) || doctorBlockedSlots.includes(time)) {
+      const msg = 'This time slot is booked or blocked. Please select another available slot.';
+      setErrorMsg(msg);
+      toast.warning(msg, 'Slot Unavailable');
       return;
     }
 
@@ -366,13 +451,16 @@ export default function AdminBookAppointmentModal({
         body: JSON.stringify({
           fullName: fullName.trim(),
           phone: cleanPhone,
-          email: trimmedEmail,
-          age: validatedAge,
+          // Walk-ins without an email are keyed by phone so repeat visits stay with the same patient
+          email: trimmedEmail || `${cleanPhone}@walkin.clinic`,
+          age: validatedAge || undefined,
           reason,
-          doctorSlug: doctorSlug || undefined,
           date,
           time,
-          consultationType,
+          location,
+          visitType,
+          // Always in-clinic: no online meeting / Google Meet is created
+          consultationType: 'offline',
           paymentMethod,
           paymentStatus,
           amount: Number(amount) || 800,
@@ -386,15 +474,13 @@ export default function AdminBookAppointmentModal({
       }
 
       toast.success(
-        `Appointment scheduled successfully for ${fullName.trim()} on ${date} at ${time}.`,
+        `Appointment scheduled successfully for ${fullName.trim()} on ${date} at ${selectedSlotLabel || time}.`,
         'Appointment Created'
       );
 
       setSuccessResult({
         id: data.appointment?.id || '',
-        calendarScheduled: data.calendarScheduled,
-        calendarMessage: data.calendarMessage,
-        meetLink: data.appointment?.meetLink,
+        location: data.appointment?.location || location,
       });
 
       onSuccess();
@@ -407,28 +493,45 @@ export default function AdminBookAppointmentModal({
     }
   };
 
-  const handleResetAndClose = () => {
+  const resetPatientFields = () => {
     setSuccessResult(null);
     setErrorMsg('');
     setFullName('');
     setPhone('');
     setEmail('');
     setAge('');
+    setReason(DEFAULT_REASON);
+    setVisitType('first');
+    setShowMore(false);
+    setTime('');
+    setShowCalendar(false);
     setNotes('');
+  };
+
+  const handleResetAndClose = () => {
+    resetPatientFields();
     onClose();
   };
 
   const handleBookAnother = () => {
-    setSuccessResult(null);
-    setErrorMsg('');
-    setFullName('');
-    setPhone('');
-    setEmail('');
-    setAge('');
-    setNotes('');
+    resetPatientFields();
   };
 
   if (!isOpen) return null;
+
+  const slotNote = !location
+    ? 'Choose a location first to see available times.'
+    : !date
+    ? 'Select a date to see available times.'
+    : date < todayIso
+    ? 'Past dates cannot be booked.'
+    : isClosedDay
+    ? `The doctor does not take appointments at ${location} on ${closedDayName}. Please choose another date.`
+    : isDoctorDateBlocked
+    ? `Doctor is unavailable on ${date} (${doctorBlockReason || 'on leave'}).`
+    : isLoadingSlots
+    ? 'Checking real-time availability...'
+    : `Available times on ${date}`;
 
   return (
     <div className="admin-drawer-overlay" onClick={handleResetAndClose}>
@@ -455,7 +558,7 @@ export default function AdminBookAppointmentModal({
             <div>
               <h3 id="drawer-title">Schedule New Appointment</h3>
               <p className="drawer-subtitle">
-                Book offline walk-in visits or online consultations with cash or digital payment.
+                Book in-clinic walk-in visits with cash or digital payment.
               </p>
             </div>
           </div>
@@ -484,21 +587,21 @@ export default function AdminBookAppointmentModal({
             </div>
             <h4>Appointment Confirmed!</h4>
             <p className="success-patient-desc">
-              Scheduled for <strong>{fullName}</strong> on <strong>{date} at {time}</strong>.
+              Scheduled for <strong>{fullName}</strong> on <strong>{date} at {selectedSlotLabel || time}</strong>.
             </p>
 
             <div className="success-details-card">
               <div className="detail-row">
                 <span>Consultation Mode:</span>
-                <strong>
-                  {consultationType === 'offline' ? 'In-Clinic (Offline Consultation)' : 'Online Video (Google Meet)'}
-                </strong>
+                <strong>In-Clinic (Offline Consultation)</strong>
               </div>
               <div className="detail-row">
-                <span>Doctor:</span>
-                <strong>
-                  {BOOKABLE_DOCTORS.find((d) => d.slug === doctorSlug)?.name || 'Not assigned'}
-                </strong>
+                <span>Visit Type:</span>
+                <strong>{visitType === 'first' ? 'First Visit' : 'Follow-up / Another Visit'}</strong>
+              </div>
+              <div className="detail-row">
+                <span>Location:</span>
+                <strong>{successResult.location || '-'}</strong>
               </div>
               <div className="detail-row">
                 <span>Payment Settlement:</span>
@@ -506,41 +609,13 @@ export default function AdminBookAppointmentModal({
                   {paymentMethod} • ₹{amount} ({paymentStatus.toUpperCase()})
                 </strong>
               </div>
-              {successResult.calendarMessage && (
-                <div className="detail-row">
-                  <span>Calendar Invite:</span>
-                  <span className="text-muted">{successResult.calendarMessage}</span>
-                </div>
-              )}
-              {consultationType === 'offline' ? (
-                <div className="detail-row">
-                  <span>Clinic Address:</span>
-                  <span className="text-muted">{CLINIC.address.full}</span>
-                </div>
-              ) : successResult.meetLink ? (
-                <div className="detail-row">
-                  <span>Google Meet:</span>
-                  <a href={successResult.meetLink} target="_blank" rel="noopener noreferrer" className="text-blue">
-                    Open Meet Call ↗
-                  </a>
-                </div>
-              ) : null}
+              <div className="detail-row">
+                <span>Clinic Address:</span>
+                <span className="text-muted">{CLINIC.address.full}</span>
+              </div>
             </div>
 
             <div className="drawer-success-actions">
-              {/* <a
-                href={`/api/appointments/${successResult.id}/ics`}
-                download
-                className="btn-download-ics"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                <span>Download .ICS Calendar File</span>
-              </a> */}
-
               <div className="drawer-success-btns-row">
                 <button type="button" className="btn-book-another" onClick={handleBookAnother}>
                   Book Another
@@ -566,248 +641,238 @@ export default function AdminBookAppointmentModal({
                 </div>
               )}
 
-              {/* 1. Mode Selector Tabs */}
-              <div className="form-group-full">
-                <label className="form-label-bold">Select Consultation Mode:</label>
-                <div className="mode-toggle-grid">
-                  <button
-                    type="button"
-                    className={`mode-card-btn ${consultationType === 'offline' ? 'active-offline' : ''}`}
-                    onClick={() => handleTypeChange('offline')}
-                  >
-                    <div className="mode-icon-box mode-icon-clinic">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 21h18" />
-                        <path d="M5 21V7l8-4v18" />
-                        <path d="M19 21V11l-6-4" />
-                        <path d="M9 9h1" />
-                        <path d="M9 13h1" />
-                        <path d="M9 17h1" />
-                      </svg>
-                    </div>
-                    <div className="mode-text">
-                      <div className="mode-title-row">
-                        <strong>In-Clinic / Offline (Walk-in)</strong>
-                        {consultationType === 'offline' && <span className="mode-check-badge">✓ Active</span>}
-                      </div>
-                      <span>In-person visit at the Akurdi Clinic &bull; Cash Accepted</span>
-                    </div>
-                  </button>
+              {/* Patient */}
+              <section className="abk-section">
+                <div className="abk-grid-2">
+                  <div className="abk-field">
+                    <label>
+                      Patient name <span className="req">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      autoFocus
+                      placeholder="e.g. Rahul Sharma"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="modal-input"
+                      required
+                    />
+                  </div>
 
-                  <button
-                    type="button"
-                    className={`mode-card-btn ${consultationType === 'online' ? 'active-online' : ''}`}
-                    onClick={() => handleTypeChange('online')}
-                  >
-                    <div className="mode-icon-box mode-icon-video">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polygon points="23 7 16 12 23 17 23 7" />
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                      </svg>
-                    </div>
-                    <div className="mode-text">
-                      <div className="mode-title-row">
-                        <strong>Online Video (Google Meet)</strong>
-                        {consultationType === 'online' && <span className="mode-check-badge">✓ Active</span>}
-                      </div>
-                      <span>Video link generated &amp; emailed to patient</span>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* 2. Patient Identity Fields */}
-              <div className="form-row-2">
-                <div className="form-field">
-                  <label>
-                    Patient Full Name <span className="req">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Rahul Sharma"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="modal-input"
-                    required
-                  />
+                  <div className="abk-field">
+                    <label>
+                      Phone <span className="req">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="10-digit mobile"
+                      value={phone}
+                      inputMode="numeric"
+                      maxLength={10}
+                      onChange={(e) => {
+                        setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+                        if (errorMsg) setErrorMsg('');
+                      }}
+                      className="modal-input"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="form-field">
-                  <label>
-                    Phone Number <span className="req">*</span>
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="10-digit mobile number"
-                    value={phone}
-                    inputMode="numeric"
-                    maxLength={10}
-                    onChange={(e) => {
-                      setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
-                      if (errorMsg) setErrorMsg('');
-                    }}
-                    className="modal-input"
-                    required
-                  />
-                </div>
-              </div>
+                <div className="abk-grid-2">
+                  <div className="abk-field">
+                    <label>Age</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      placeholder="optional"
+                      value={age}
+                      onChange={(e) => {
+                        setAge(e.target.value);
+                        if (errorMsg) setErrorMsg('');
+                      }}
+                      className="modal-input"
+                    />
+                  </div>
 
-              <div className="form-row-2">
-                <div className="form-field">
-                  <label>
-                    Patient Email Address
-                    <span className="req">*</span>
-                    <small className="label-tip"> (for Google Calendar &amp; Meet Invite)</small>
-                  </label>
-                  <input
-                    type="email"
-                    autoComplete="email"
-                    maxLength={254}
-                    placeholder="patient@example.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (errorMsg) setErrorMsg('');
-                    }}
-                    className="modal-input"
-                    required
-                  />
-                </div>
-
-                <div className="form-field">
-                  <label>
-                    Age <span className="req">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="120"
-                    placeholder="e.g. 30"
-                    value={age}
-                    onChange={(e) => {
-                      setAge(e.target.value);
-                      if (errorMsg) setErrorMsg('');
-                    }}
-                    className="modal-input"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* 2b. Doctor */}
-              <div className="form-field">
-                <label>Doctor</label>
-                <select
-                  value={doctorSlug}
-                  onChange={(e) => {
-                    setDoctorSlug(e.target.value);
-                    setTime('');
-                    if (errorMsg) setErrorMsg('');
-                  }}
-                  className="modal-input modal-select"
-                >
-                  <option value="">Any / not assigned to a doctor</option>
-                  {BOOKABLE_DOCTORS.map((d) => (
-                    <option key={d.slug} value={d.slug}>
-                      {d.name} ({d.role})
-                    </option>
-                  ))}
-                </select>
-                <div style={{ marginTop: 8 }}>
-                  {doctorSlug ? (
-                    <DoctorBadge slug={doctorSlug} />
-                  ) : (
-                    <small style={{ color: '#64748b' }}>
-                      No doctor selected. This booking will show as &quot;Not assigned&quot;.
-                    </small>
-                  )}
-                </div>
-              </div>
-
-              {/* 3. Reason for Visit */}
-              <div className="form-field">
-                <label>Consultation Health Concern <span className="req">*</span></label>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="modal-input modal-select"
-                  required
-                >
-                  {HEALTH_REASONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 4. Date & Time Selection */}
-              <div className="form-field">
-                <label>
-                  Appointment Date <span className="req">*</span>
-                </label>
-                <ThemedDatePicker
-                  value={date}
-                  onChange={(newDate) => setDate(newDate)}
-                  minDate={tomorrowIso}
-                  appointments={appointments}
-                  existingOverrides={overrides}
-                  disableWeeklyOff={true}
-                  disableDoctorLeaves={true}
-                  disableFullyBooked={true}
-                  className="modal-date-picker"
-                />
-              </div>
-
-              <div className="form-field">
-                <label>
-                  Select Time Slot <span className="req">*</span>
-                  {isLoadingSlots && <small className="label-loading"> (Checking slots...)</small>}
-                </label>
-                <div className="slots-select-grid">
-                  {daySlots.length === 0 && (
-                    <p className="field-hint">The doctor does not sit on this day. Please pick another date.</p>
-                  )}
-                  {daySlots.map((slot) => {
-                    const isBooked = bookedSlots.includes(slot.value);
-                    const isSelected = time === slot.value;
-                    return (
+                  <div className="abk-field">
+                    <label>Visit</label>
+                    <div className="abk-seg" role="radiogroup" aria-label="Visit type">
                       <button
-                        key={slot.value}
                         type="button"
-                        disabled={isBooked}
-                        className={`slot-pill-btn ${isSelected ? 'selected' : ''} ${isBooked ? 'booked' : ''}`}
-                        onClick={() => setTime(slot.value)}
+                        role="radio"
+                        aria-checked={visitType === 'first'}
+                        className={visitType === 'first' ? 'is-active' : ''}
+                        disabled={isSubmitting}
+                        onClick={() => setVisitType('first')}
                       >
-                        {slot.label}
-                        {slot.location && new Set(daySlots.map((x) => x.location)).size > 1 && (
-                          <span className="slot-pill-loc">{slot.location}</span>
-                        )}
-                        {isBooked && <span className="booked-badge">Booked</span>}
+                        First
                       </button>
-                    );
-                  })}
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={visitType === 'follow_up'}
+                        className={visitType === 'follow_up' ? 'is-active' : ''}
+                        disabled={isSubmitting}
+                        onClick={() => setVisitType('follow_up')}
+                      >
+                        Follow-up
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                {selectedLocation && (
-                  <p className="field-hint" style={{ marginTop: 8 }}>
-                    Doctor location for this slot: <strong>{selectedLocation}</strong>
-                  </p>
+
+                <div className="abk-field">
+                  <label>Reason for consultation</label>
+                  <select
+                    value={reason}
+                    onChange={(e) => {
+                      setReason(e.target.value);
+                      if (errorMsg) setErrorMsg('');
+                    }}
+                    className="modal-input modal-select"
+                  >
+                    {CONSULTATION_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </section>
+
+              {/* When */}
+              <section className="abk-section">
+                {clinic.isLoaded && clinic.bookableLocations.length > 1 && (
+                  <div className="abk-field">
+                    <label>Location</label>
+                    <div className="abk-chips" role="radiogroup" aria-label="Clinic location">
+                      {clinic.bookableLocations.map((loc) => (
+                        <button
+                          key={loc}
+                          type="button"
+                          role="radio"
+                          aria-checked={location === loc}
+                          className={`abk-chip ${location === loc ? 'is-active' : ''}`}
+                          disabled={isSubmitting}
+                          onClick={() => handleLocationSelect(loc)}
+                        >
+                          {loc}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
-              </div>
+                {!clinic.isLoaded && <p className="abk-note">Loading...</p>}
 
-              {/* 5. Payment & Billing Section */}
-              <div className="modal-payment-section">
-                <h4 className="payment-section-title">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="5" width="20" height="14" rx="2" />
-                    <line x1="2" y1="10" x2="22" y2="10" />
-                  </svg>
-                  <span>Payment &amp; Billing (Desk Settlement)</span>
-                </h4>
+                <div className="abk-field">
+                  <label>Date</label>
+                  {location ? (
+                    <>
+                      <div className="abk-chips">
+                        <button
+                          type="button"
+                          className={`abk-chip ${date === todayIso ? 'is-active' : ''}`}
+                          disabled={isSubmitting || dateOptionDisabled(todayIso)}
+                          onClick={() => handleDateSelect(todayIso)}
+                        >
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          className={`abk-chip ${date === tomorrowIso ? 'is-active' : ''}`}
+                          disabled={isSubmitting || dateOptionDisabled(tomorrowIso)}
+                          onClick={() => handleDateSelect(tomorrowIso)}
+                        >
+                          Tomorrow
+                        </button>
+                        <button
+                          type="button"
+                          className={`abk-chip is-ghost ${showCalendar || (date !== todayIso && date !== tomorrowIso) ? 'is-active' : ''}`}
+                          disabled={isSubmitting}
+                          onClick={() => setShowCalendar((v) => !v)}
+                        >
+                          {date !== todayIso && date !== tomorrowIso && prettyDate
+                            ? prettyDate
+                            : showCalendar
+                            ? 'Hide calendar'
+                            : 'Other date'}
+                        </button>
+                      </div>
+                      {showCalendar && (
+                        <div className="abk-calendar-wrap">
+                          <CalendarPicker
+                            selectedDate={date}
+                            onSelectDate={handleDateSelect}
+                            minDate={todayIso}
+                            disabled={isSubmitting}
+                            doctorBlockedDates={doctorBlockedDates}
+                            closedWeekdays={clinic.closedWeekdaysFor(location)}
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="abk-note">Choose a location to see its dates.</p>
+                  )}
+                </div>
 
-                <div className="form-row-3">
-                  <div className="form-field">
-                    <label>Consultation Fee (₹) <span className="req">*</span></label>
+                <div className="abk-field">
+                  <div className="abk-slots-head">
+                    <label>Time slot</label>
+                    {isLoadingSlots && <span className="abk-note">Checking...</span>}
+                  </div>
+
+                  {!dateIsBookable ? (
+                    <p className={`abk-note ${isClosedDay || isDoctorDateBlocked ? 'is-warn' : ''}`}>{slotNote}</p>
+                  ) : (
+                    <>
+                      {SLOTS.length === 0 && (
+                        <p className="abk-note is-warn">No time slots on this day. Please pick another date.</p>
+                      )}
+                      <div className="abk-slots">
+                        {SLOTS.map((slot) => {
+                          const isDoctorBlocked = doctorBlockedSlots.includes(slot.value);
+                          const isBooked = bookedSlots.includes(slot.value);
+                          const isPast = isPastSlot(slot.value);
+                          const isUnavailable = isBooked || isDoctorBlocked || isPast;
+                          const isSelected = time === slot.value;
+                          return (
+                            <button
+                              key={slot.value}
+                              type="button"
+                              disabled={isUnavailable || isSubmitting}
+                              className={`abk-slot ${isSelected ? 'is-selected' : ''}`}
+                              onClick={() => {
+                                setTime(slot.value);
+                                if (errorMsg) setErrorMsg('');
+                              }}
+                            >
+                              <span>{slot.label}</span>
+                              {isPast ? (
+                                <small>Passed</small>
+                              ) : isDoctorBlocked ? (
+                                <small>Unavailable</small>
+                              ) : isBooked ? (
+                                <small>Booked</small>
+                              ) : hasMultipleLocations && slot.location ? (
+                                <small>{slot.location}</small>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </section>
+
+              {/* Payment */}
+              <section className="abk-section">
+                <div className="abk-grid-3">
+                  <div className="abk-field">
+                    <label>Fee (₹)</label>
                     <input
                       type="number"
                       value={amount}
@@ -817,48 +882,86 @@ export default function AdminBookAppointmentModal({
                     />
                   </div>
 
-                  <div className="form-field">
-                    <label>Payment Method</label>
-                    <select
-                      value={paymentMethod}
-                      onChange={(e) => {
-                        const m = e.target.value as 'Cash' | 'UPI' | 'Card' | 'Pending';
-                        setPaymentMethod(m);
-                        if (m === 'Cash') setPaymentStatus('paid');
-                      }}
-                      className="modal-input modal-select highlight-cash"
-                    >
-                      <option value="Cash">Cash (Desk Collection)</option>
-                      <option value="UPI">UPI (QR / PhonePe / GPay)</option>
-                      <option value="Card">Card / Swipe POS</option>
-                    </select>
+                  <div className="abk-field">
+                    <label>Payment</label>
+                    <div className="abk-seg" role="radiogroup" aria-label="Payment method">
+                      {(['Cash', 'UPI', 'Card'] as const).map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={paymentMethod === m}
+                          className={paymentMethod === m ? 'is-active' : ''}
+                          onClick={() => {
+                            setPaymentMethod(m);
+                            if (m === 'Cash') setPaymentStatus('paid');
+                          }}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="form-field">
-                    <label>Payment Status</label>
-                    <select
-                      value={paymentStatus}
-                      onChange={(e) => setPaymentStatus(e.target.value as 'paid' | 'pending')}
-                      className={`modal-input modal-select ${paymentStatus === 'paid' ? 'status-paid-select' : 'status-pending-select'}`}
-                    >
-                      <option value="paid">Paid &amp; Settled</option>
-                      <option value="pending">Awaiting Payment</option>
-                    </select>
+                  <div className="abk-field">
+                    <label>Status</label>
+                    <div className="abk-seg" role="radiogroup" aria-label="Payment status">
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={paymentStatus === 'paid'}
+                        className={paymentStatus === 'paid' ? 'is-active' : ''}
+                        onClick={() => setPaymentStatus('paid')}
+                      >
+                        Paid
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={paymentStatus === 'pending'}
+                        className={paymentStatus === 'pending' ? 'is-active' : ''}
+                        onClick={() => setPaymentStatus('pending')}
+                      >
+                        Pending
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* 6. Front Desk Notes */}
-              <div className="form-field">
-                <label>Front Desk Notes / Clinical Remarks (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Walk-in patient paid cash ₹800 at clinic reception"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="modal-input"
-                />
-              </div>
+                <button type="button" className="abk-more" onClick={() => setShowMore((v) => !v)}>
+                  {showMore ? '− Hide email & notes' : '+ Add email / notes (optional)'}
+                </button>
+
+                {showMore && (
+                  <div className="abk-grid-2" style={{ marginTop: 10 }}>
+                    <div className="abk-field">
+                      <label>Email</label>
+                      <input
+                        type="email"
+                        autoComplete="email"
+                        maxLength={254}
+                        placeholder="patient@example.com"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (errorMsg) setErrorMsg('');
+                        }}
+                        className="modal-input"
+                      />
+                    </div>
+                    <div className="abk-field">
+                      <label>Notes</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Walk-in, paid at reception"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="modal-input"
+                      />
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
 
             {/* Sticky Bottom Actions Bar */}
@@ -878,7 +981,7 @@ export default function AdminBookAppointmentModal({
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (
-                  <span>Scheduling &amp; Dispatching Invite...</span>
+                  <span>Scheduling...</span>
                 ) : (
                   <>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">

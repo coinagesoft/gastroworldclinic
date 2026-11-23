@@ -25,6 +25,7 @@ export interface Appointment {
   createdAt: string;
   // Status & Payment Management
   status?: 'confirmed' | 'completed' | 'cancelled' | 'no-show';
+  // 'pending' = booked without online payment (patient pays at the clinic)
   paymentStatus?: 'paid' | 'pending' | 'refunded';
   amount?: number; // In INR, default: 800
   paymentMethod?: 'UPI' | 'Card' | 'NetBanking' | 'Cash' | 'Razorpay' | 'Pending';
@@ -38,6 +39,8 @@ export interface Appointment {
   doctorSlug?: string;
   /** Doctor's display name, saved with the booking so history stays correct. */
   doctorName?: string;
+  /** First visit or a follow-up / repeat visit. Empty on older bookings. */
+  visitType?: 'first' | 'follow_up';
 }
 
 interface AppointmentRow extends RowDataPacket {
@@ -63,6 +66,7 @@ interface AppointmentRow extends RowDataPacket {
   location?: string | null;
   doctor_slug?: string | null;
   doctor_name?: string | null;
+  visit_type?: 'first' | 'follow_up' | null;
   created_at: string;
 }
 
@@ -73,6 +77,11 @@ function mapRowToAppointment(row: AppointmentRow): Appointment {
     row.consultation_type === 'offline' ||
     (row.notes && row.notes.toLowerCase().includes('offline')) ||
     (!row.meet_link && row.payment_method === 'Cash');
+
+  const paymentStatus = row.payment_status || 'paid';
+  // A booking that is still "pending" (pay at clinic) has no real payment yet,
+  // so do not show a payment ID or a paid-at time for it.
+  const isPending = paymentStatus === 'pending';
 
   return {
     id: row.id,
@@ -88,23 +97,45 @@ function mapRowToAppointment(row: AppointmentRow): Appointment {
     googleEventId: row.google_event_id || undefined,
     createdAt: row.created_at,
     status: row.status || 'confirmed',
-    paymentStatus: row.payment_status || 'paid',
+    paymentStatus,
     amount: row.amount !== undefined && row.amount !== null ? Number(row.amount) : 800,
     paymentMethod: row.payment_method || 'Razorpay',
-    paymentId: row.payment_id || `PAY-${row.id.slice(0, 8).toUpperCase()}`,
-    paidAt: row.paid_at || row.created_at,
+    paymentId: isPending ? undefined : row.payment_id || `PAY-${row.id.slice(0, 8).toUpperCase()}`,
+    paidAt: isPending ? undefined : row.paid_at || row.created_at,
     notes: row.notes || '',
     consultationType: isOffline ? 'offline' : 'online',
     location: row.location || undefined,
     doctorSlug: row.doctor_slug || undefined,
     doctorName: row.doctor_name || undefined,
+    visitType: row.visit_type || undefined,
   };
+}
+
+// Adds the visit_type column the first time it is needed (safe to run repeatedly)
+let visitTypeColumnReady: Promise<void> | null = null;
+function ensureVisitTypeColumn(): Promise<void> {
+  if (!visitTypeColumnReady) {
+    visitTypeColumnReady = (async () => {
+      try {
+        await getPool().execute(`ALTER TABLE appointments ADD COLUMN visit_type VARCHAR(20) NULL`);
+      } catch (err: any) {
+        // Column already exists: fine
+        if (err?.code !== 'ER_DUP_FIELDNAME') {
+          visitTypeColumnReady = null;
+          throw err;
+        }
+      }
+    })();
+  }
+  return visitTypeColumnReady;
 }
 
 async function syncPatientAndPaymentTables(appt: Appointment): Promise<void> {
   const pool = getPool();
   const cleanEmail = appt.email.trim().toLowerCase();
   const nowIso = new Date().toISOString();
+  // Placeholder ID is derived from the appointment id, so it stays the same
+  // when a pending booking is later marked as paid (the payments row is updated, not duplicated).
   const paymentId = appt.paymentId || `PAY-${appt.id.slice(0, 8).toUpperCase()}`;
   const amount = typeof appt.amount === 'number' ? appt.amount : 800;
   const paymentMethod = appt.paymentMethod || 'Razorpay';
@@ -194,6 +225,7 @@ export async function getAppointmentById(id: string): Promise<Appointment | null
 
 export async function saveAppointment(appointment: Appointment): Promise<Appointment> {
   await ensureDatabaseSchema();
+  await ensureVisitTypeColumn();
   const pool = getPool();
 
   const status = appointment.status || 'confirmed';
@@ -201,7 +233,10 @@ export async function saveAppointment(appointment: Appointment): Promise<Appoint
   const amount = typeof appointment.amount === 'number' ? appointment.amount : 800;
   const paymentMethod = appointment.paymentMethod || 'Razorpay';
   const paymentId = appointment.paymentId || `PAY-${appointment.id.slice(0, 8).toUpperCase()}`;
-  const paidAt = appointment.paidAt || appointment.createdAt;
+  // When a pending (pay at clinic) booking is later marked paid, stamp the time of payment
+  const paidAt =
+    appointment.paidAt ||
+    (paymentStatus === 'paid' ? new Date().toISOString() : appointment.createdAt);
   const notes = appointment.notes || '';
   const consultationType = appointment.consultationType || 'online';
 
@@ -210,8 +245,8 @@ export async function saveAppointment(appointment: Appointment): Promise<Appoint
       id, full_name, phone, email, age, reason,
       appointment_date, appointment_time, message, meet_link, google_event_id,
       status, payment_status, amount, payment_method, payment_id, paid_at, notes, consultation_type, location,
-      doctor_slug, doctor_name, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      doctor_slug, doctor_name, visit_type, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       full_name = VALUES(full_name),
       phone = VALUES(phone),
@@ -233,7 +268,8 @@ export async function saveAppointment(appointment: Appointment): Promise<Appoint
       consultation_type = VALUES(consultation_type),
       location = VALUES(location),
       doctor_slug = VALUES(doctor_slug),
-      doctor_name = VALUES(doctor_name)`,
+      doctor_name = VALUES(doctor_name),
+      visit_type = VALUES(visit_type)`,
     [
       appointment.id,
       appointment.fullName,
@@ -257,6 +293,7 @@ export async function saveAppointment(appointment: Appointment): Promise<Appoint
       appointment.location || null,
       appointment.doctorSlug || null,
       appointment.doctorName || null,
+      appointment.visitType || null,
       appointment.createdAt,
     ]
   );

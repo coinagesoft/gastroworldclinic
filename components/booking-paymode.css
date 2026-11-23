@@ -1,0 +1,51 @@
+/* Payment option selector: Pay now (Razorpay) / Pay at clinic */
+.bk-paymode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.bk-paymode-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1.5px solid #dcdcf0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.bk-paymode-opt strong {
+  font-size: 14px;
+  color: #1f2040;
+}
+
+.bk-paymode-opt span {
+  font-size: 12px;
+  color: #6b6b85;
+}
+
+.bk-paymode-opt:hover:not(:disabled) {
+  border-color: #565acf;
+}
+
+.bk-paymode-opt.is-selected {
+  border-color: #565acf;
+  background: #f1f1ff;
+}
+
+.bk-paymode-opt:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .bk-paymode {
+    grid-template-columns: 1fr;
+  }
+}

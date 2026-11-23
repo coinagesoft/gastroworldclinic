@@ -411,6 +411,7 @@ export async function POST(request: NextRequest) {
       notes = '',
       message = '',
       doctorSlug: requestedDoctorSlug,
+      visitType: requestedVisitType,
     } = body;
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 2) {
@@ -490,6 +491,9 @@ export async function POST(request: NextRequest) {
     const appointmentId = crypto.randomUUID();
     const finalAmount = typeof amount === 'number' && !isNaN(amount) ? amount : 500;
 
+    // First visit or follow-up (defaults to first visit)
+    const visitType: 'first' | 'follow_up' = requestedVisitType === 'follow_up' ? 'follow_up' : 'first';
+
     const newAppointment: Appointment = {
       id: appointmentId,
       fullName: fullName.trim(),
@@ -512,6 +516,7 @@ export async function POST(request: NextRequest) {
       location: bookingLocation,
       doctorSlug: chosenDoctor?.slug,
       doctorName: chosenDoctor?.name,
+      visitType,
     };
 
     // Calendar sync & meeting invite

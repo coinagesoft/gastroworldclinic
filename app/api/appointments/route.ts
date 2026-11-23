@@ -39,6 +39,12 @@ import { getBookableDoctorBySlug } from '@/lib/doctorsTeam';
 
 export const dynamic = 'force-dynamic';
 
+// Consultation fee (used when the patient pays online)
+const CONSULTATION_FEE_INR = 500;
+
+// Value the booking form sends when the patient chooses to pay at the clinic
+const PAY_AT_CLINIC = 'Pay at clinic';
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const date = searchParams.get('date');
@@ -228,9 +234,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!paymentId || typeof paymentId !== 'string' || !paymentId.trim()) {
+    // Payment is optional:
+    //  - "Pay at clinic": the slot is booked now, the fee is collected at the visit.
+    //  - Online (Razorpay): a payment ID is required, the booking is stored as paid.
+    const payAtClinic = paymentMethod === PAY_AT_CLINIC;
+    const cleanPaymentId = typeof paymentId === 'string' ? paymentId.trim() : '';
+
+    if (!payAtClinic && !cleanPaymentId) {
       return NextResponse.json(
-        { error: 'Payment of ₹500 is required to confirm your appointment.' },
+        {
+          error: `Payment of ₹${CONSULTATION_FEE_INR} is required to confirm your appointment, or choose "Pay at clinic".`,
+        },
         { status: 400 }
       );
     }
@@ -311,6 +325,7 @@ export async function POST(request: NextRequest) {
     }
 
     const appointmentId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
     const newAppointment: Appointment = {
       id: appointmentId,
       fullName: fullName.trim(),
@@ -321,13 +336,15 @@ export async function POST(request: NextRequest) {
       date,
       time,
       message: message ? String(message).trim() : '',
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
       status: 'confirmed',
-      paymentStatus: 'paid',
-      amount: 500,
-      paymentMethod: paymentMethod || 'Razorpay',
-      paymentId: paymentId.trim(),
-      paidAt: new Date().toISOString(),
+      // Online payment -> paid now. Pay at clinic -> pending until collected at the visit.
+      paymentStatus: payAtClinic ? 'pending' : 'paid',
+      amount: payAtClinic ? 0 : CONSULTATION_FEE_INR,
+      // 'Pending' is an existing allowed value in the Appointment type / DB
+      paymentMethod: payAtClinic ? 'Pending' : paymentMethod || 'Razorpay',
+      paymentId: payAtClinic ? undefined : cleanPaymentId,
+      paidAt: payAtClinic ? undefined : nowIso,
       notes: '',
       location: bookingLocation,
       doctorSlug: chosenDoctor?.slug,

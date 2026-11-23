@@ -9,6 +9,7 @@ import { formatSlotLabel } from '@/lib/slots';
 import { CLINIC } from '@/lib/clinicInfo';
 import './booking.css';
 import './booking-doctor.css';
+import './booking-paymode.css';
 
 // Single-doctor clinic: there is no doctor picker. Timings, leave and booked slots are clinic-wide.
 // Change this name if the doctor shown on the confirmation / Razorpay notes should differ.
@@ -29,6 +30,8 @@ interface FormData {
   message: string;
 }
 
+type PaymentMode = 'online' | 'clinic';
+
 interface ConfirmedBooking {
   id: string;
   fullName: string;
@@ -38,6 +41,7 @@ interface ConfirmedBooking {
   reason: string;
   location?: string;
   doctorName?: string;
+  paid?: boolean;
   paymentId?: string;
   amount?: number;
   meetLink?: string;
@@ -160,6 +164,9 @@ export default function AppointmentForm() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [confirmedBooking, setConfirmedBooking] = useState<ConfirmedBooking | null>(null);
   const [tomorrowIso, setTomorrowIso] = useState('');
+
+  // Payment is optional: pay online now (Razorpay) or book and pay at the clinic
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>('online');
 
   // Real booked slots loaded from backend
   const [serverBookedSlots, setServerBookedSlots] = useState<string[]>([]);
@@ -546,7 +553,8 @@ export default function AppointmentForm() {
     }
   }, [formData.date, isSunday]);
 
-  // Validate form, verify slot availability, and directly open Razorpay Checkout
+  // Validate form, verify slot availability, then either book directly (pay at clinic)
+  // or open Razorpay Checkout (pay now)
   const handlePayAndBookSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPaymentError(null);
@@ -584,7 +592,7 @@ export default function AppointmentForm() {
       return;
     }
 
-    // Verify real-time slot availability before opening Razorpay
+    // Verify real-time slot availability before booking / opening Razorpay
     setIsCheckingSlot(true);
     try {
       const res = await fetch(
@@ -623,13 +631,22 @@ export default function AppointmentForm() {
     }
 
     setConfirmedBooking(null);
-    await handleRazorpayPayment();
+
+    if (paymentMode === 'clinic') {
+      // No online payment: book the slot directly, patient pays at the clinic
+      setIsProcessingPayment(true); // keeps the form locked while booking
+      await createAppointmentAfterPayment();
+    } else {
+      await handleRazorpayPayment();
+    }
   };
 
-  // Create appointment on backend after Razorpay payment succeeds
-  const createAppointmentAfterPayment = async (razorpayPaymentId: string) => {
+  // Create appointment on backend.
+  // With a Razorpay payment ID -> paid booking. Without one -> "pay at clinic" booking.
+  const createAppointmentAfterPayment = async (razorpayPaymentId?: string) => {
     setIsSubmitting(true);
     setPaymentError(null);
+    const isPaid = Boolean(razorpayPaymentId);
 
     try {
       const response = await fetch('/api/appointments', {
@@ -637,9 +654,10 @@ export default function AppointmentForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          paymentId: razorpayPaymentId,
-          paymentMethod: 'Razorpay',
-          amount: CONSULTATION_FEE_INR,
+          paymentMethod: isPaid ? 'Razorpay' : 'Pay at clinic',
+          paymentStatus: isPaid ? 'paid' : 'pending',
+          amount: isPaid ? CONSULTATION_FEE_INR : 0,
+          ...(isPaid ? { paymentId: razorpayPaymentId } : {}),
         }),
       });
 
@@ -658,7 +676,9 @@ export default function AppointmentForm() {
         } else {
           const errDetail =
             result.error ||
-            `Payment (${razorpayPaymentId}) succeeded, but booking encountered an error. Please contact the clinic.`;
+            (isPaid
+              ? `Payment (${razorpayPaymentId}) succeeded, but booking encountered an error. Please contact the clinic.`
+              : 'Could not book your appointment. Please try again or call the clinic.');
           setPaymentError(errDetail);
           toast.error(errDetail, 'Booking Error');
         }
@@ -681,8 +701,9 @@ export default function AppointmentForm() {
         reason: result.appointment.reason,
         location: result.appointment.location,
         doctorName: result.appointment.doctorName || DOCTOR_NAME,
+        paid: isPaid,
         paymentId: result.appointment.paymentId || razorpayPaymentId,
-        amount: result.appointment.amount || CONSULTATION_FEE_INR,
+        amount: isPaid ? result.appointment.amount || CONSULTATION_FEE_INR : 0,
         meetLink: result.meetLink,
         googleCalendarUrl: result.googleCalendarUrl,
         googleConnected: result.googleConnected,
@@ -710,8 +731,10 @@ export default function AppointmentForm() {
         successBoxRef.current?.focus({ preventScroll: true });
       }, 80);
     } catch (err) {
-      console.error('Error submitting appointment after payment:', err);
-      const errMsg = `Network error while finalizing booking (Payment ID: ${razorpayPaymentId}). Please try again.`;
+      console.error('Error submitting appointment:', err);
+      const errMsg = isPaid
+        ? `Network error while finalizing booking (Payment ID: ${razorpayPaymentId}). Please try again.`
+        : 'Network error while booking your appointment. Please try again.';
       setPaymentError(errMsg);
       toast.error(errMsg, 'Booking Finalization Error');
     } finally {
@@ -727,7 +750,7 @@ export default function AppointmentForm() {
 
     if (!RAZORPAY_KEY_ID) {
       const keyError =
-        'Online payment is not configured yet. Please call the clinic to book your appointment.';
+        'Online payment is not configured yet. Please choose "Pay at clinic" or call the clinic to book your appointment.';
       console.error('NEXT_PUBLIC_RAZORPAY_KEY_ID is not set.');
       setPaymentError(keyError);
       toast.error(keyError, 'Payment Not Configured');
@@ -738,7 +761,7 @@ export default function AppointmentForm() {
     const scriptLoaded = await loadRazorpayCheckoutScript();
     if (!scriptLoaded || !window.Razorpay) {
       const loadError =
-        'Unable to load Razorpay payment gateway. Please check your internet connection and try again.';
+        'Unable to load Razorpay payment gateway. Please check your internet connection and try again, or choose "Pay at clinic".';
       setPaymentError(loadError);
       toast.error(loadError, 'Payment Gateway Error');
       setIsProcessingPayment(false);
@@ -831,6 +854,20 @@ export default function AppointmentForm() {
   const fieldCls = (name: keyof FormData, extra = '') =>
     `bk-field ${extra} ${errors[name] ? 'invalid' : ''}`.trim();
 
+  const submitLabel = isSubmitting
+    ? paymentMode === 'online'
+      ? 'Payment Successful! Booking Appointment...'
+      : 'Booking Appointment...'
+    : isProcessingPayment
+    ? paymentMode === 'online'
+      ? 'Opening Razorpay...'
+      : 'Booking Appointment...'
+    : isCheckingSlot
+    ? 'Checking Slot...'
+    : paymentMode === 'online'
+    ? `Pay ₹${CONSULTATION_FEE_INR} & Book Appointment`
+    : 'Book Appointment';
+
   return (
     <div className="bk">
       <div className="bk-card" ref={paymentStepRef}>
@@ -902,17 +939,19 @@ export default function AppointmentForm() {
                 <div>
                   <dt>Payment</dt>
                   <dd>
-                    <span className="bk-success-paid">₹{confirmedBooking.amount || CONSULTATION_FEE_INR} paid</span>
-                    {confirmedBooking.paymentId ? (
-                      <small>ID {confirmedBooking.paymentId}</small>
-                    ) : null}
+                    {confirmedBooking.paid ? (
+                      <>
+                        <span className="bk-success-paid">₹{confirmedBooking.amount || CONSULTATION_FEE_INR} paid</span>
+                        {confirmedBooking.paymentId ? (
+                          <small>ID {confirmedBooking.paymentId}</small>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span>₹{CONSULTATION_FEE_INR} to be paid at the clinic</span>
+                    )}
                   </dd>
                 </div>
               </dl>
-
-              <p className="bk-success-note">
-                A Google Meet video call has been scheduled on your calendar. Please check your email for the details.
-              </p>
 
               <div className="bk-success-actions">
                 {confirmedBooking.googleCalendarUrl ? (
@@ -1186,7 +1225,7 @@ export default function AppointmentForm() {
                 </div>
 
                 <div className={fieldCls('email')}>
-                  <label htmlFor="email">Email (for calendar invite)</label>
+                  <label htmlFor="email">Email</label>
                   <input
                     type="email"
                     id="email"
@@ -1261,6 +1300,32 @@ export default function AppointmentForm() {
                 </div>
               </div>
 
+              {/* Payment option: pay online now, or book and pay at the clinic */}
+              <div className="bk-paymode" role="radiogroup" aria-label="Payment option">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={paymentMode === 'online'}
+                  className={`bk-paymode-opt ${paymentMode === 'online' ? 'is-selected' : ''}`}
+                  disabled={isBusy}
+                  onClick={() => setPaymentMode('online')}
+                >
+                  <strong>Pay now</strong>
+                  <span>₹{CONSULTATION_FEE_INR} online via Razorpay</span>
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={paymentMode === 'clinic'}
+                  className={`bk-paymode-opt ${paymentMode === 'clinic' ? 'is-selected' : ''}`}
+                  disabled={isBusy}
+                  onClick={() => setPaymentMode('clinic')}
+                >
+                  <strong>Pay at clinic</strong>
+                  <span>Book now, pay during your visit</span>
+                </button>
+              </div>
+
               {paymentError && (
                 <div className="payment-error-banner bk-pay-error" role="alert">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1273,13 +1338,7 @@ export default function AppointmentForm() {
               )}
 
               <button type="submit" className="bk-pay" disabled={isBusy}>
-                {isSubmitting
-                  ? 'Payment Successful! Booking Appointment...'
-                  : isProcessingPayment
-                  ? 'Opening Razorpay...'
-                  : isCheckingSlot
-                  ? 'Checking Slot...'
-                  : `Pay ₹${CONSULTATION_FEE_INR} & Book Appointment`}
+                {submitLabel}
               </button>
             </section>
           </div>

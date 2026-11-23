@@ -320,12 +320,13 @@ export default function PrescriptionModal({
   const [followUpDays, setFollowUpDays] = useState<number | null>(null);
   const { isClosedOn } = useClinicSettings();
   const [sendTo, setSendTo] = useState('');
-  const [busy, setBusy] = useState<'save' | 'pdf' | 'send' | 'whatsapp' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'pdf' | 'send' | null>(null);
   const [dirty, setDirty] = useState(false);
+  // WhatsApp link panel (QR). It is never forced on the doctor: "Send to Patient" simply skips
+  // WhatsApp when it is not linked, and a small "Link WhatsApp" button appears instead.
   const [waPanelOpen, setWaPanelOpen] = useState(false);
   const [waInfo, setWaInfo] = useState<{ status: string; qr: string | null } | null>(null);
-  const [waPendingId, setWaPendingId] = useState<string | null>(null);
-  const sendWaRef = useRef<((id: string) => void) | null>(null);
+  const [waNotLinked, setWaNotLinked] = useState(false);
 
   // Load existing prescription (if any) whenever a different appointment is opened
   useEffect(() => {
@@ -440,7 +441,7 @@ export default function PrescriptionModal({
     return STRENGTHS;
   };
 
-  // While the QR panel is open: poll the connection status, and send automatically once linked
+  // While the QR panel is open: poll the connection status and close the panel once linked
   useEffect(() => {
     if (!waPanelOpen) return;
     let cancelled = false;
@@ -453,12 +454,8 @@ export default function PrescriptionModal({
         setWaInfo({ status: data.status, qr: data.qr });
         if (data.status === 'connected') {
           setWaPanelOpen(false);
-          toast.success('WhatsApp linked successfully.');
-          if (waPendingId) {
-            const id = waPendingId;
-            setWaPendingId(null);
-            sendWaRef.current?.(id);
-          }
+          setWaNotLinked(false);
+          toast.success('WhatsApp linked. Prescriptions will now also go on WhatsApp.');
         }
       } catch {
         // keep polling
@@ -874,67 +871,94 @@ export default function PrescriptionModal({
     }
   };
 
-  /** Sends the saved prescription PDF to the patient on WhatsApp (automatic, no manual attach). */
-  const sendWhatsAppFor = async (prescriptionId: string) => {
-    setBusy('whatsapp');
-    try {
-      const res = await adminFetch(`/api/admin/prescriptions/${prescriptionId}/whatsapp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: appointment.phone }),
-      });
-      const data = await res.json();
-      if (res.status === 409 && data.code === 'not_connected') {
-        // Clinic WhatsApp is not linked yet -> show the QR code panel
-        setWaPendingId(prescriptionId);
-        setWaInfo(null);
-        setWaPanelOpen(true);
-        return;
-      }
-      if (!res.ok) throw new Error(data.error || 'Failed to send WhatsApp message');
-      toast.success(`Prescription PDF sent on WhatsApp to +${data.sentTo}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send WhatsApp message');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  sendWaRef.current = (id: string) => {
-    void sendWhatsAppFor(id);
-  };
-
-  const handleWhatsApp = async () => {
-    setBusy('whatsapp');
-    const saved = await save(true);
-    if (!saved) {
-      setBusy(null);
-      return;
-    }
-    await sendWhatsAppFor(saved.id);
-  };
-
-  const handleSend = async () => {
+  /**
+   * ONE button sends the saved prescription PDF by email AND on WhatsApp.
+   * The two channels are independent: if one fails (or WhatsApp is not linked),
+   * the other one still goes out.
+   */
+  const handleSendToPatient = async () => {
     const to = sendTo.trim();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to);
+    const phoneOk = Boolean(appointment.phone && appointment.phone.trim());
+
+    if (!emailOk && !phoneOk) {
       toast.error('Enter a valid patient email address.');
       return;
     }
+
     setBusy('send');
     try {
       const saved = await save(true);
       if (!saved) return;
-      const res = await adminFetch(`/api/admin/prescriptions/${saved.id}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: to }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to send email');
-      setPrescription({ ...saved, emailedAt: new Date().toISOString() });
-      toast.success(`Prescription PDF emailed to ${to}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to send email');
+
+      const sendEmail = async (): Promise<{ ok: boolean; error?: string }> => {
+        try {
+          const res = await adminFetch(`/api/admin/prescriptions/${saved.id}/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: to }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) return { ok: false, error: data.error || 'Failed to send email' };
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Failed to send email' };
+        }
+      };
+
+      const sendWhatsApp = async (): Promise<{ ok: boolean; notLinked?: boolean; sentTo?: string; error?: string }> => {
+        try {
+          const res = await adminFetch(`/api/admin/prescriptions/${saved.id}/whatsapp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: appointment.phone }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 409 && data.code === 'not_connected') return { ok: false, notLinked: true };
+          if (!res.ok) return { ok: false, error: data.error || 'Failed to send WhatsApp message' };
+          return { ok: true, sentTo: data.sentTo };
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : 'Failed to send WhatsApp message' };
+        }
+      };
+
+      const [emailRes, waRes] = await Promise.all([
+        emailOk ? sendEmail() : Promise.resolve(null),
+        phoneOk ? sendWhatsApp() : Promise.resolve(null),
+      ]);
+
+      const sent: string[] = [];
+      const problems: string[] = [];
+
+      if (emailRes) {
+        if (emailRes.ok) {
+          sent.push(`email (${to})`);
+          setPrescription({ ...saved, emailedAt: new Date().toISOString() });
+        } else {
+          problems.push(`Email failed: ${emailRes.error}.`);
+        }
+      } else {
+        problems.push('No valid email address, so email was skipped.');
+      }
+
+      if (waRes) {
+        if (waRes.ok) {
+          sent.push(`WhatsApp${waRes.sentTo ? ` (+${waRes.sentTo})` : ''}`);
+          setWaNotLinked(false);
+        } else if (waRes.notLinked) {
+          setWaNotLinked(true);
+          problems.push('WhatsApp is not linked, so it was not sent there.');
+        } else {
+          problems.push(`WhatsApp failed: ${waRes.error}.`);
+        }
+      }
+
+      if (sent.length > 0) {
+        toast.success(`Prescription sent by ${sent.join(' and ')}.`);
+        if (problems.length > 0) toast.warning(problems.join(' '), 'Partly sent');
+      } else {
+        toast.error(problems.join(' ') || 'Could not send the prescription.');
+      }
     } finally {
       setBusy(null);
     }
@@ -1286,6 +1310,7 @@ export default function PrescriptionModal({
                 .rx2-followup .fu-clear { border: none; background: #fef2f2; color: #b91c1c; font-weight: 700; font-size: 12.5px; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; }
                 .rx2-followup .fu-note { font-size: 12.5px; line-height: 1.5; color: #475569; background: #f5f6ff; border: 1px solid #dde1f8; border-radius: 10px; padding: 8px 12px; }
                 .rx2-followup .fu-warn { color: #b45309; font-weight: 700; }
+                .rx2-send-hint { display: block; margin-top: 4px; font-size: 12px; font-weight: 500; color: #64748b; }
               `}</style>
               <label className="rx-field rx2-advice">
                 <span>Advice / Diet</span>
@@ -1352,6 +1377,9 @@ export default function PrescriptionModal({
                   <IconMail size={13} /> Patient email (for PDF)
                 </span>
                 <input type="email" value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="patient@email.com" />
+                <small className="rx2-send-hint">
+                  &ldquo;Send to Patient&rdquo; sends the PDF to this email and to the patient&apos;s WhatsApp number ({appointment.phone}).
+                </small>
               </label>
             </section>
           </div>
@@ -1372,14 +1400,22 @@ export default function PrescriptionModal({
             <button type="button" className="rx-btn rx-btn-outline" onClick={handleDownloadPdf} disabled={busy !== null || loading}>
               <IconFileText size={14} /> {busy === 'pdf' ? 'Preparing PDF…' : 'Print / Download PDF'}
             </button>
-            <button type="button" className="rx-btn rx-btn-outline" onClick={handleWhatsApp} disabled={busy !== null || loading}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M20.5 3.5A11.8 11.8 0 0 0 12 0 12 12 0 0 0 1.6 17.9L0 24l6.3-1.6A12 12 0 0 0 12 24a12 12 0 0 0 8.5-20.5zM12 21.9a9.9 9.9 0 0 1-5-1.4l-.4-.2-3.7 1 1-3.6-.2-.4A9.9 9.9 0 1 1 12 21.9zm5.4-7.4c-.3-.1-1.8-.9-2-1s-.5-.1-.7.1-.8 1-1 1.2-.4.2-.6.1a8 8 0 0 1-4-3.5c-.3-.5.3-.5.9-1.6a.6.6 0 0 0 0-.6l-.9-2.1c-.2-.6-.5-.5-.7-.5h-.6a1.1 1.1 0 0 0-.8.4 3.4 3.4 0 0 0-1 2.5 5.9 5.9 0 0 0 1.2 3.1 13.5 13.5 0 0 0 5.2 4.6c1.9.8 2.6.9 3.5.7a3 3 0 0 0 2-1.4 2.4 2.4 0 0 0 .2-1.4c-.1-.1-.3-.2-.6-.3z" />
-              </svg>{' '}
-              {busy === 'whatsapp' ? 'Sending…' : 'Send on WhatsApp'}
-            </button>
-            <button type="button" className="rx-btn rx-btn-primary" onClick={handleSend} disabled={busy !== null || loading}>
-              <IconMail size={14} /> {busy === 'send' ? 'Sending…' : 'Email PDF to Patient'}
+            {waNotLinked && (
+              <button
+                type="button"
+                className="rx-btn rx-btn-outline"
+                onClick={() => {
+                  setWaInfo(null);
+                  setWaPanelOpen(true);
+                }}
+                disabled={busy !== null || loading}
+                title="WhatsApp is not linked yet. Link it once to send prescriptions on WhatsApp too."
+              >
+                Link WhatsApp
+              </button>
+            )}
+            <button type="button" className="rx-btn rx-btn-primary" onClick={handleSendToPatient} disabled={busy !== null || loading}>
+              <IconMail size={14} /> {busy === 'send' ? 'Sending…' : 'Send to Patient'}
             </button>
           </div>
         </div>
@@ -1540,7 +1576,7 @@ export default function PrescriptionModal({
             position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(15,23,42,0.6)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
           }}
-          onClick={() => { setWaPanelOpen(false); setWaPendingId(null); }}
+          onClick={() => setWaPanelOpen(false)}
         >
           <div
             style={{
@@ -1560,13 +1596,13 @@ export default function PrescriptionModal({
               <div style={{ padding: '60px 0', color: '#64748b', fontSize: 14 }}>Generating QR code…</div>
             )}
             <p style={{ margin: '12px 0 0', fontSize: 12, color: '#64748b' }}>
-              The prescription will be sent automatically after linking.
+              After linking, &ldquo;Send to Patient&rdquo; will send on WhatsApp as well as email.
             </p>
             <button
               type="button"
               className="rx-btn rx-btn-ghost"
               style={{ marginTop: 14 }}
-              onClick={() => { setWaPanelOpen(false); setWaPendingId(null); }}
+              onClick={() => setWaPanelOpen(false)}
             >
               Cancel
             </button>
