@@ -42,6 +42,65 @@ const MEDICINE_FORMS = [
   'Other',
 ];
 
+// ---------------------------------------------------------------------------
+// Inline styles for the Edit / Delete action buttons (no external CSS needed)
+// ---------------------------------------------------------------------------
+const actionWrapStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+};
+
+const actionBtnBase: React.CSSProperties = {
+  WebkitAppearance: 'none',
+  appearance: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '6px',
+  height: '32px',
+  borderRadius: '8px',
+  borderWidth: '1px',
+  borderStyle: 'solid',
+  fontFamily: 'inherit',
+  fontSize: '12.5px',
+  fontWeight: 600,
+  lineHeight: 1,
+  cursor: 'pointer',
+  outline: 'none',
+  boxShadow: 'none',
+  transition: 'background 0.15s ease, border-color 0.15s ease',
+};
+
+const editBtnStyle: React.CSSProperties = {
+  ...actionBtnBase,
+  padding: '0 12px',
+  background: '#EEF2FF',
+  borderColor: '#C7D2FE',
+  color: '#4338CA',
+};
+
+const delBtnStyle: React.CSSProperties = {
+  ...actionBtnBase,
+  width: '32px',
+  padding: 0,
+  background: '#FEF2F2',
+  borderColor: '#FECACA',
+  color: '#DC2626',
+};
+
+const setEditHover = (el: HTMLButtonElement, on: boolean) => {
+  el.style.background = on ? '#E0E7FF' : '#EEF2FF';
+  el.style.borderColor = on ? '#A5B4FC' : '#C7D2FE';
+};
+
+const setDelHover = (el: HTMLButtonElement, on: boolean) => {
+  if (el.disabled) return;
+  el.style.background = on ? '#FEE2E2' : '#FEF2F2';
+  el.style.borderColor = on ? '#FCA5A5' : '#FECACA';
+};
+
 interface FormState {
   id?: string;
   name: string;
@@ -1288,7 +1347,7 @@ export default function AdminMedicinesTab({
                     <th>Common Potencies</th>
                     <th>Category</th>
                     <th>Clinical Notes / Indications</th>
-                    <th className="th-actions-meds">Actions</th>
+                    <th className="th-actions-meds" style={{ minWidth: '130px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1377,25 +1436,34 @@ export default function AdminMedicinesTab({
                         </span>
                       </td>
                       <td className="td-actions" style={{ textAlign: 'center' }}>
-                        <div className="action-pill-group" style={{ justifyContent: 'center' }}>
+                        <div style={actionWrapStyle}>
                           <button
                             type="button"
-                            className="action-pill action-pill-edit"
+                            style={editBtnStyle}
                             title="Edit remedy or potencies"
                             onClick={() => handleOpenEdit(med)}
+                            onMouseEnter={(e) => setEditHover(e.currentTarget, true)}
+                            onMouseLeave={(e) => setEditHover(e.currentTarget, false)}
                           >
-                            <IconEdit size={13} />
+                            <IconEdit size={14} />
                             <span>Edit</span>
                           </button>
 
                           <button
                             type="button"
-                            className="action-pill action-pill-del"
+                            style={{
+                              ...delBtnStyle,
+                              opacity: deletingId === med.id ? 0.5 : 1,
+                              cursor: deletingId === med.id ? 'not-allowed' : 'pointer',
+                            }}
                             title="Delete medicine from database"
+                            aria-label={`Delete ${med.name}`}
                             disabled={deletingId === med.id}
                             onClick={() => handleDelete(med.id, med.name)}
+                            onMouseEnter={(e) => setDelHover(e.currentTarget, true)}
+                            onMouseLeave={(e) => setDelHover(e.currentTarget, false)}
                           >
-                            <IconTrash size={13} />
+                            <IconTrash size={14} />
                           </button>
                         </div>
                       </td>
@@ -1766,25 +1834,33 @@ export default function AdminMedicinesTab({
                               </span>
                             </td>
                             <td style={{ textAlign: 'right' }}>
-                              <div style={{ display: 'inline-flex', gap: '6px' }}>
+                              <div style={{ ...actionWrapStyle, justifyContent: 'flex-end' }}>
                                 <button
                                   type="button"
-                                  className="action-pill action-pill-edit"
-                                  style={{ minWidth: '30px', width: '30px', height: '30px', padding: 0 }}
+                                  style={{ ...editBtnStyle, width: '32px', padding: 0 }}
                                   title="Edit category"
+                                  aria-label={`Edit ${cat.name}`}
                                   onClick={() => handleEditCategoryClick(cat)}
+                                  onMouseEnter={(e) => setEditHover(e.currentTarget, true)}
+                                  onMouseLeave={(e) => setEditHover(e.currentTarget, false)}
                                 >
-                                  <IconEdit size={13} />
+                                  <IconEdit size={14} />
                                 </button>
                                 <button
                                   type="button"
-                                  className="action-pill action-pill-del"
-                                  style={{ width: '30px', height: '30px', padding: 0 }}
+                                  style={{
+                                    ...delBtnStyle,
+                                    opacity: deletingCategoryId === cat.id ? 0.5 : 1,
+                                    cursor: deletingCategoryId === cat.id ? 'not-allowed' : 'pointer',
+                                  }}
                                   title="Delete category"
+                                  aria-label={`Delete ${cat.name}`}
                                   disabled={deletingCategoryId === cat.id}
                                   onClick={() => handleDeleteCategory(cat)}
+                                  onMouseEnter={(e) => setDelHover(e.currentTarget, true)}
+                                  onMouseLeave={(e) => setDelHover(e.currentTarget, false)}
                                 >
-                                  <IconTrash size={13} />
+                                  <IconTrash size={14} />
                                 </button>
                               </div>
                             </td>

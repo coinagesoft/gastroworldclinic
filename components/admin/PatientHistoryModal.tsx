@@ -25,6 +25,91 @@ interface PatientHistoryModalProps {
   onReschedule: (appt: Appointment) => void;
 }
 
+/**
+ * Self-contained styles for the visit status dropdown.
+ * Kept here (not in globals.css) so the select is styled regardless of any
+ * global `select` rules, and so this file works on its own.
+ */
+const STATUS_SELECT_CSS = `
+.phm-status-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.phm-status-field .phm-status-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+.phm-status-field .phm-status-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.phm-status-field .phm-status-dot {
+  position: absolute;
+  left: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
+.phm-status-field .phm-status-chevron {
+  position: absolute;
+  right: 11px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  color: currentColor;
+  opacity: 0.75;
+}
+.phm-status-field select.phm-status-select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  min-width: 150px;
+  height: 36px;
+  padding: 0 34px 0 28px !important;
+  border-radius: 10px !important;
+  border: 1px solid currentColor !important;
+  background-color: var(--phm-bg) !important;
+  color: inherit !important;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  transition: box-shadow 0.15s ease, filter 0.15s ease;
+}
+.phm-status-field select.phm-status-select:hover {
+  filter: brightness(0.97);
+}
+.phm-status-field select.phm-status-select:focus-visible {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25);
+}
+.phm-status-field select.phm-status-select option {
+  color: #0f172a;
+  background: #ffffff;
+  font-weight: 500;
+}
+
+.phm-status-field .phm-status-select-wrap[data-status='confirmed'] {
+  color: #3730a3;
+  --phm-bg: #eef2ff;
+}
+.phm-status-field .phm-status-select-wrap[data-status='completed'] {
+  color: #047857;
+  --phm-bg: #ecfdf5;
+}
+.phm-status-field .phm-status-select-wrap[data-status='cancelled'] {
+  color: #b91c1c;
+  --phm-bg: #fef2f2;
+}
+`;
+
 function formatDate(dateStr?: string) {
   if (!dateStr) return '—';
   const parsed = new Date(`${dateStr}T00:00:00`);
@@ -134,6 +219,12 @@ export default function PatientHistoryModal({
 
   const initial = patient.fullName?.trim().charAt(0).toUpperCase() || '?';
 
+  // Normalise the stored status to one of the three editable values
+  const currentStatus: EditableStatus =
+    selected?.status === 'no-show'
+      ? 'cancelled'
+      : ((selected?.status as EditableStatus | undefined) ?? 'confirmed');
+
   return (
     <div
       className="admin-drawer-overlay"
@@ -141,6 +232,8 @@ export default function PatientHistoryModal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      <style>{STATUS_SELECT_CSS}</style>
+
       <div className="admin-drawer-panel admin-drawer-panel-patient" role="dialog" aria-modal="true">
         {/* Header */}
         <div className="patient-drawer-header">
@@ -287,16 +380,37 @@ export default function PatientHistoryModal({
                           <span className="query-text">{selected.reason || '—'}</span>
                           {selected.message && <span className="query-text">{selected.message}</span>}
                         </div>
-                        <div className="selected-appt-concern">
-                          <span className="detail-tag-label">Status</span>
-                          <select
-                            value={selected.status === 'no-show' ? 'cancelled' : selected.status ?? 'confirmed'}
-                            onChange={(e) => handleStatus(e.target.value as EditableStatus)}
-                          >
-                            <option value="confirmed">Confirmed</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
+
+                        {/* Visit status */}
+                        <div className="selected-appt-concern phm-status-field">
+                          <label className="phm-status-label" htmlFor="phm-visit-status">
+                            Status
+                          </label>
+                          <div className="phm-status-select-wrap" data-status={currentStatus}>
+                            <span className="phm-status-dot" aria-hidden="true" />
+                            <select
+                              id="phm-visit-status"
+                              className="phm-status-select"
+                              value={currentStatus}
+                              onChange={(e) => handleStatus(e.target.value as EditableStatus)}
+                            >
+                              <option value="confirmed">Confirmed</option>
+                              <option value="completed">Completed</option>
+                              <option value="cancelled">Cancelled</option>
+                            </select>
+                            <svg
+                              className="phm-status-chevron"
+                              viewBox="0 0 20 20"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M5 8l5 5 5-5" />
+                            </svg>
+                          </div>
                         </div>
                       </div>
                     </div>
