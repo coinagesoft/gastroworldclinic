@@ -5,7 +5,7 @@
   --theme-active: #f26b21;  /* active page link (same orange as your "Services" link) */
   --theme-ink:    #1c1a5e;  /* dark navy text / headings */
   --theme-muted:  #4b5280;  /* normal dropdown link colour */
-  --theme-soft:   #f1f2ff;  /* light tint backgrounds (page hero, placeholders) */
+  --theme-soft:   #f1f2ff;  /* light tint backgrounds (page hero, placeholder) */
   --theme-border: #e3e5f5;
 }
 /* ==================================================================== */
