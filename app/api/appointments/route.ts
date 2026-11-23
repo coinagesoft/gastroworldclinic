@@ -3,12 +3,9 @@ import crypto from 'crypto';
 import {
   saveAppointment,
   getBookedSlotsForDate,
-  ensureGoogleTokensLoaded,
   Appointment,
 } from '@/lib/storage';
 import {
-  isGoogleConnected,
-  createCalendarMeeting,
   generateGoogleCalendarUrl,
   DOCTOR_EMAIL,
 } from '@/lib/google';
@@ -134,6 +131,8 @@ export async function POST(request: NextRequest) {
       location: requestedLocation,
       doctorSlug: requestedDoctorSlug,
     } = body;
+    // NOTE: consultationType from the client is intentionally ignored.
+    // Gastroworld is an in-clinic (offline) only clinic, so every booking is offline.
 
     // Validation
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length < 3) {
@@ -311,7 +310,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if slot is already booked in MySQL DB
+    // Check if slot is already booked in the database
     const dbBooked = await isTimeSlotTaken(date, time, undefined, chosenDoctor?.slug);
     if (dbBooked) {
       return NextResponse.json(
@@ -338,6 +337,8 @@ export async function POST(request: NextRequest) {
       message: message ? String(message).trim() : '',
       createdAt: nowIso,
       status: 'confirmed',
+      // Always an in-clinic visit: no online consultation, no Google Meet link
+      consultationType: 'offline',
       // Online payment -> paid now. Pay at clinic -> pending until collected at the visit.
       paymentStatus: payAtClinic ? 'pending' : 'paid',
       amount: payAtClinic ? 0 : CONSULTATION_FEE_INR,
@@ -351,30 +352,8 @@ export async function POST(request: NextRequest) {
       doctorName: chosenDoctor?.name,
     };
 
-    let meetLink = '';
-    let googleEventId = '';
-    let calendarError = '';
-    await ensureGoogleTokensLoaded();
-    const googleConnected = isGoogleConnected();
-
-    if (googleConnected) {
-      try {
-        const meetingResult = await createCalendarMeeting(newAppointment);
-        meetLink = meetingResult.meetLink;
-        googleEventId = meetingResult.eventId;
-        newAppointment.meetLink = meetLink;
-        newAppointment.googleEventId = googleEventId;
-      } catch (calError) {
-        console.error('Google Calendar event creation failed:', calError);
-        calendarError = calError instanceof Error ? calError.message : 'Calendar sync failed';
-        meetLink = `https://meet.google.com/lookup/hmpc-${appointmentId.slice(0, 8)}`;
-        newAppointment.meetLink = meetLink;
-      }
-    } else {
-      meetLink = `https://meet.google.com/lookup/hmpc-${appointmentId.slice(0, 8)}`;
-      newAppointment.meetLink = meetLink;
-    }
-
+    // In-clinic only: no Google Meet link and no Google Calendar meeting is created.
+    // The patient can still use the "Add to Google Calendar" link returned below.
     await saveAppointment(newAppointment);
 
     // Direct Branded Confirmation Email via SMTP (Nodemailer)
@@ -390,7 +369,7 @@ export async function POST(request: NextRequest) {
         const mail = bookingConfirmationEmail(
           {
             ...newAppointment,
-            consultationType: newAppointment.consultationType ?? 'online',
+            consultationType: 'offline',
           },
           appUrl
         );
@@ -411,7 +390,7 @@ export async function POST(request: NextRequest) {
       try {
         const a = {
           ...newAppointment,
-          consultationType: newAppointment.consultationType ?? ('online' as const),
+          consultationType: 'offline' as const,
         };
         await sendMsg91WhatsApp({
           template: process.env.MSG91_WHATSAPP_TEMPLATE_CONFIRMATION,
@@ -430,20 +409,16 @@ export async function POST(request: NextRequest) {
     }
 
     const googleCalendarUrl = generateGoogleCalendarUrl(newAppointment);
-    const eventCreated = Boolean(googleEventId);
 
     return NextResponse.json(
       {
         success: true,
         appointment: newAppointment,
-        meetLink,
         googleCalendarUrl,
-        googleConnected: eventCreated,
+        googleConnected: false,
         doctorEmail: DOCTOR_EMAIL,
-        calendarError: calendarError || undefined,
-        message: eventCreated
-          ? 'Your consultation has been booked successfully! The appointment and Google Meet video link have been scheduled on your calendar.'
-          : 'Your consultation has been booked! Use the button below to add it to your calendar.',
+        message:
+          'Your in-clinic consultation has been booked! Use the button below to add it to your calendar.',
       },
       { status: 201 }
     );

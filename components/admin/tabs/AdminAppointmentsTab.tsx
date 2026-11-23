@@ -11,7 +11,6 @@ import {
   IconCross,
   IconTrash,
   IconFileText,
-  IconVideo,
   IconBuilding,
   IconSearch,
   IconFilter,
@@ -34,8 +33,13 @@ interface AdminAppointmentsTabProps {
   setStatusFilter: (val: string) => void;
   timeFilter: string;
   setTimeFilter: (val: string) => void;
-  modeFilter: 'all' | 'offline' | 'online';
-  setModeFilter: (val: 'all' | 'offline' | 'online') => void;
+  /**
+   * Legacy props. The clinic is offline-only now, so the mode filter is gone.
+   * They are kept optional so the parent page still compiles; you can delete
+   * them from the parent (modeFilter state and these two props) whenever you like.
+   */
+  modeFilter?: 'all' | 'offline' | 'online';
+  setModeFilter?: (val: 'all' | 'offline' | 'online') => void;
   apptViewMode: 'table' | 'calendar';
   setApptViewMode: (val: 'table' | 'calendar') => void;
   onRefresh: () => void;
@@ -69,8 +73,6 @@ export default function AdminAppointmentsTab({
   setStatusFilter,
   timeFilter,
   setTimeFilter,
-  modeFilter,
-  setModeFilter,
   apptViewMode,
   setApptViewMode,
   onRefresh,
@@ -89,7 +91,6 @@ export default function AdminAppointmentsTab({
     Boolean(searchQuery.trim()) ||
     statusFilter !== 'all' ||
     timeFilter !== 'all' ||
-    modeFilter !== 'all' ||
     sortBy !== 'latest';
 
   // Group appointments by unique email (or phone/id if no email)
@@ -206,9 +207,6 @@ export default function AdminAppointmentsTab({
         result = result.filter((a) => a.date < nowIso);
       }
     }
-    if (modeFilter !== 'all') {
-      result = result.filter((a) => a.consultationType === modeFilter);
-    }
 
     // Sort order
     result.sort((a, b) => {
@@ -217,18 +215,17 @@ export default function AdminAppointmentsTab({
       if (sortBy === 'latest') return dtB.localeCompare(dtA);
       if (sortBy === 'oldest') return dtA.localeCompare(dtB);
       if (sortBy === 'name') return a.fullName.localeCompare(b.fullName);
-      if (sortBy === 'amount') return (b.amount || 800) - (a.amount || 800);
+      if (sortBy === 'amount') return (b.amount || 0) - (a.amount || 0);
       return 0;
     });
 
     return result;
-  }, [deduplicatedAppointments, searchQuery, statusFilter, timeFilter, modeFilter, sortBy]);
+  }, [deduplicatedAppointments, searchQuery, statusFilter, timeFilter, sortBy]);
 
   const handleResetFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
     setTimeFilter('all');
-    setModeFilter('all');
     setSortBy('latest');
   };
 
@@ -315,25 +312,7 @@ export default function AdminAppointmentsTab({
             )}
           </div>
 
-          {/* 2. Consultation Mode Filter */}
-          <div className="filter-select-wrap">
-            <span className="filter-icon-box" aria-hidden="true">
-              <IconBuilding size={14} />
-            </span>
-            <select
-              className="directory-filter-select"
-              value={modeFilter}
-              onChange={(e) =>
-                setModeFilter(e.target.value as 'all' | 'offline' | 'online')
-              }
-            >
-              <option value="all">All Modes ({appointments.length})</option>
-              <option value="offline">In-Clinic (Offline)</option>
-              <option value="online">Online (Google Meet)</option>
-            </select>
-          </div>
-
-          {/* 3. Status Filter */}
+          {/* 2. Status Filter */}
           <div className="filter-select-wrap">
             <span className="filter-icon-box" aria-hidden="true">
               <IconFilter size={14} />
@@ -350,7 +329,7 @@ export default function AdminAppointmentsTab({
             </select>
           </div>
 
-          {/* 4. Timeframe Filter */}
+          {/* 3. Timeframe Filter */}
           <div className="filter-select-wrap">
             <span className="filter-icon-box" aria-hidden="true">
               <IconCalendar size={14} />
@@ -367,7 +346,7 @@ export default function AdminAppointmentsTab({
             </select>
           </div>
 
-          {/* 5. Sort Dropdown */}
+          {/* 4. Sort Dropdown */}
           <div className="filter-select-wrap">
             <select
               className="directory-filter-select sort-select"
@@ -461,7 +440,6 @@ export default function AdminAppointmentsTab({
                 <thead>
                   <tr>
                     <th>Date &amp; Time</th>
-                    <th>Mode</th>
                     <th>Patient Details</th>
                     <th>Health Concern</th>
                     <th>Status</th>
@@ -478,14 +456,6 @@ export default function AdminAppointmentsTab({
                           <span>{appt.time}</span>
                           {appt.location && <small className="appt-location">📍 {appt.location}</small>}
                         </div>
-                      </td>
-                      <td>
-                        <span
-                          className={`mode-pill ${appt.consultationType === 'offline' ? 'mode-offline' : 'mode-online'
-                            }`}
-                        >
-                          {appt.consultationType === 'offline' ? 'In-Clinic' : 'Online Meet'}
-                        </span>
                       </td>
                       <td>
                         <div className="cell-patient">
@@ -543,10 +513,9 @@ export default function AdminAppointmentsTab({
                       </td>
                       <td>
                         <div className="cell-payment-wrap">
-                          <span className={`payment-pill pill-${appt.paymentStatus || 'paid'}`}>
+                          <span className={`payment-pill pill-${appt.paymentStatus || 'pending'}`}>
                             {appt.paymentStatus === 'paid'
-                              ? `${appt.paymentMethod === 'Cash' ? 'Cash Paid' : 'Paid'} ₹${appt.amount || 800
-                              }`
+                              ? `${appt.paymentMethod === 'Cash' ? 'Cash Paid' : 'Paid'} ₹${appt.amount || 0}`
                               : appt.paymentStatus === 'refunded'
                                 ? 'Refunded'
                                 : 'Pending'}
@@ -596,26 +565,14 @@ export default function AdminAppointmentsTab({
                             <span>Reschedule</span>
                           </button>
 
-                          {appt.consultationType !== 'offline' && appt.meetLink ? (
-                            <a
-                              href={appt.meetLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="action-pill action-pill-meet"
-                              title="Join Google Meet Video Consultation"
-                            >
-                              <IconVideo size={13} />
-                              <span>Meet</span>
-                            </a>
-                          ) : (
-                            <span
-                              className="action-pill action-pill-clinic"
-                              title="In-Clinic Visit (Akurdi Clinic)"
-                            >
-                              <IconBuilding size={13} />
-                              <span>In-Clinic</span>
-                            </span>
-                          )}
+                          {/* Offline-only clinic: every visit is in-clinic, no Meet link */}
+                          <span
+                            className="action-pill action-pill-clinic"
+                            title={appt.location ? `In-Clinic Visit (${appt.location})` : 'In-Clinic Visit'}
+                          >
+                            <IconBuilding size={13} />
+                            <span>In-Clinic</span>
+                          </span>
 
                           <button
                             type="button"

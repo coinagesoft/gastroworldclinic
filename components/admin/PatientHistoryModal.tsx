@@ -4,16 +4,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Appointment } from '@/lib/storage';
 import { PatientGroup } from '@/components/admin/types';
 import { toast } from '@/components/ui/Toast';
-import DoctorBadge from './DoctorBadge';
 import {
   IconCross,
   IconPhone,
   IconMail,
   IconCopy,
   IconCheck,
-  IconVideo,
   IconBuilding,
-  IconExternalLink,
   IconClock,
 } from './AdminIcons';
 
@@ -213,7 +210,6 @@ export default function PatientHistoryModal({
                   {sorted.map((appt, idx) => {
                     const sessionNo = sorted.length - idx;
                     const hasNotes = !!appt.notes?.trim();
-                    const isOnline = appt.consultationType === 'online';
                     return (
                       <button
                         key={appt.id}
@@ -238,12 +234,10 @@ export default function PatientHistoryModal({
                           <span className="concern-label">Concern</span>
                           <span className="concern-val">{appt.reason || '—'}</span>
                         </div>
-                        <div className="appt-item-doctor" style={{ marginTop: 6 }}>
-                          <DoctorBadge slug={appt.doctorSlug} name={appt.doctorName} variant="compact" />
-                        </div>
                         <div className="appt-item-notes-status">
-                          <span className={`appt-mode-chip ${isOnline ? 'mode-online' : 'mode-clinic'}`}>
-                            {isOnline ? 'Online' : 'Clinic'}
+                          {/* Offline-only clinic: every visit is in-clinic */}
+                          <span className="appt-mode-chip mode-clinic">
+                            {appt.location || 'Clinic'}
                           </span>
                           <span className={`appt-note-badge ${hasNotes ? 'badge-recorded' : 'badge-empty'}`}>
                             {hasNotes ? 'Notes recorded' : 'No notes'}
@@ -271,28 +265,10 @@ export default function PatientHistoryModal({
                             <IconClock size={14} /> {formatTime(selected.time)}
                           </span>
                           <span className="selected-appt-session-badge">
-                            {selected.consultationType === 'online' ? (
-                              <>
-                                <IconVideo /> Online
-                              </>
-                            ) : (
-                              <>
-                                <IconBuilding /> {selected.location || 'Clinic'}
-                              </>
-                            )}
+                            <IconBuilding /> {selected.location || 'Clinic'}
                           </span>
                         </div>
                         <div className="selected-appt-actions">
-                          {selected.meetLink && selected.status !== 'cancelled' && (
-                            <a
-                              className="selected-meet-btn"
-                              href={selected.meetLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <IconExternalLink /> Join Meet
-                            </a>
-                          )}
                           {selected.status !== 'completed' && selected.status !== 'cancelled' && (
                             <button
                               type="button"
@@ -310,8 +286,6 @@ export default function PatientHistoryModal({
                           <span className="query-label">Health concern</span>
                           <span className="query-text">{selected.reason || '—'}</span>
                           {selected.message && <span className="query-text">{selected.message}</span>}
-                          <span className="query-label" style={{ display: 'block', marginTop: 10 }}>Doctor</span>
-                          <DoctorBadge slug={selected.doctorSlug} name={selected.doctorName} />
                         </div>
                         <div className="selected-appt-concern">
                           <span className="detail-tag-label">Status</span>

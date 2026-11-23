@@ -654,6 +654,8 @@ export default function AppointmentForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          // Gastroworld is an in-clinic (offline) only clinic: never online / Google Meet
+          consultationType: 'offline',
           paymentMethod: isPaid ? 'Razorpay' : 'Pay at clinic',
           paymentStatus: isPaid ? 'paid' : 'pending',
           amount: isPaid ? CONSULTATION_FEE_INR : 0,
